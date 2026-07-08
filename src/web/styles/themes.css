@@ -1,0 +1,360 @@
+/* ===== light theme (default) ===== */
+:root {
+  --bg: #faf8f3;
+  --surface: #ffffff;
+  --border: #e1dccf;
+  --text: #2b2620;
+  --muted: #7a7368;
+  --accent: #b45309;
+  --accent-hover: #92400e;
+  --code-bg: #f6f1e6;
+  /* Deep chestnut — warm leather book-spine, pairs with cream paper bg
+   * and orange (#b45309) accent. */
+  --header-bg: #3d2817;
+  --header-text: #fdf6e8;
+  --ok: #15803d;
+  --err: #b91c1c;
+  --warn: #b45309;
+
+  --hl-red:    #fecaca;
+  --hl-green:  #bbf7d0;
+  --hl-blue:   #bae6fd;
+  --hl-yellow: #fef08a;
+  --hl-purple: #ddd6fe;
+
+  /* prism tokens (light) */
+  --tok-keyword: #b45309;
+  --tok-string:  #15803d;
+  --tok-number:  #9333ea;
+  --tok-comment: #9ca3af;
+  --tok-fn:      #1e40af;
+  --tok-punct:   #6b7280;
+  --tok-class:   #be185d;
+  --tok-op:      #c2410c;
+
+  /* ----- font stacks -----
+   * Centralised here so every CSS file references the variable, not the
+   * raw stack. Change a stack once → every selector updates. */
+  --font-display: "Playfair Display", "Lora", Georgia, "Noto Serif CJK SC", serif;
+  --font-body: "Newsreader", Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
+  /* Statement default is Georgia — a screen-legible system serif that needs no
+   * download. EB Garamond is offered as an opt-in via [data-font-statement]
+   * (it's shipped by fonts.ts, but Georgia is the intentional default look). */
+  --font-statement: Georgia, "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "Noto Serif CJK SC", "Songti SC", serif;
+  --font-cjk: "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "EB Garamond", Georgia, "Noto Serif CJK SC", "Songti SC", serif;
+  --font-cjk-label: "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", serif;
+  --font-code: "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* ----- translation annotation theme (light) -----
+   * Three palettes switchable from Settings via [data-tr-theme].
+   * Default (no attribute) falls back to amber so existing sessions stay
+   * identical. amber follows the leather-book warm tone; ink is the cool
+   * ink-counterpoint (calm, "margin note"); indigo is the high-contrast
+   * "classical annotation" look. */
+  --tr-text: #7c4a12;      /* amber body text */
+  --tr-line: #b45309;      /* left border + label */
+  --tr-bg: color-mix(in srgb, var(--accent) 14%, transparent);
+  --tr-label: #fff8ec;
+  --tr-label-bg: #b45309;
+  --tr-close: #b45309;
+}
+[data-tr-theme="ink"][data-theme],
+:root[data-tr-theme="ink"] {
+  --tr-text: #3f6b78;      /* teal-ink body */
+  --tr-line: #3f6b78;
+  --tr-bg: color-mix(in srgb, #3f6b78 9%, transparent);
+  --tr-label: #f0f4f5;
+  --tr-label-bg: #3f6b78;
+  --tr-close: #3f6b78;
+}
+[data-tr-theme="indigo"][data-theme],
+:root[data-tr-theme="indigo"] {
+  --tr-text: #1e3a8a;      /* indigo body */
+  --tr-line: #1e3a8a;
+  --tr-bg: color-mix(in srgb, #1e3a8a 10%, transparent);
+  --tr-label: #eef2ff;
+  --tr-label-bg: #1e3a8a;
+  --tr-close: #1e3a8a;
+}
+
+/* ===== dark theme ===== */
+[data-theme="dark"] {
+  --bg: #1e1a14;
+  --surface: #25201a;
+  --border: #3d362d;
+  --text: #ece5d4;
+  --muted: #998d7a;
+  --accent: #e0a458;
+  --accent-hover: #f0b870;
+  --code-bg: #1a1612;
+  --header-bg: #15110d;
+  --header-text: #ece5d4;
+  --ok: #9fc97c;
+  --err: #e08e7b;
+  --warn: #f0c674;
+
+  --hl-red:    #6b2424;
+  --hl-green:  #3d4f1f;
+  --hl-blue:   #234852;
+  --hl-yellow: #5c4419;
+  --hl-purple: #4a2f5c;
+
+  --tok-keyword: #d97757;   /* terracotta — keywords, control flow */
+  --tok-string:  #9bc28b;   /* sage — strings (cool counterpoint) */
+  --tok-number:  #d4a774;   /* amber — numbers, booleans */
+  --tok-comment: #6b6256;   /* dim taupe, italic */
+  --tok-fn:      #f5d6a0;   /* cream-honey — function names */
+  --tok-punct:   #9b9182;   /* warm gray — punctuation */
+  --tok-class:   #c89bb5;   /* dusty rose — types, class names */
+  --tok-op:      #e8a384;   /* soft coral — operators */
+
+  /* translation palettes — dark variants (warmer, lower-saturation) */
+  --tr-text: #e0a458;      /* amber on dark */
+  --tr-line: #e0a458;
+  --tr-bg: color-mix(in srgb, var(--accent) 16%, transparent);
+  --tr-label: #1e1a14;
+  --tr-label-bg: #e0a458;
+  --tr-close: #e0a458;
+}
+[data-theme="dark"][data-tr-theme="ink"] {
+  --tr-text: #8fb6c2;      /* teal-ink on dark */
+  --tr-line: #8fb6c2;
+  --tr-bg: color-mix(in srgb, #8fb6c2 12%, transparent);
+  --tr-label: #15110d;
+  --tr-label-bg: #8fb6c2;
+  --tr-close: #8fb6c2;
+}
+[data-theme="dark"][data-tr-theme="indigo"] {
+  --tr-text: #93b4f0;      /* indigo on dark */
+  --tr-line: #93b4f0;
+  --tr-bg: color-mix(in srgb, #93b4f0 13%, transparent);
+  --tr-label: #15110d;
+  --tr-label-bg: #93b4f0;
+  --tr-close: #93b4f0;
+}
+
+/* ===== color themes (independent of light/dark) =====
+ * Each palette overrides all UI tokens. They pair with [data-theme="dark"]
+ * so the dark selector fires first (provides a baseline), then the color
+ * override refines specific tokens. For light mode the color selector alone
+ * works since :root already has the light baseline.
+ *
+ * Selectors are ordered [data-color-theme="X"][data-theme="dark"] so they
+ * beat [data-theme="dark"] on specificity when both are present. For light
+ * we also include :root[data-color-theme="X"] so the override works even
+ * before React sets data-theme. */
+
+/* ---- cool-gray (冷灰蓝) ---- */
+[data-color-theme="cool-gray"][data-theme="dark"],
+:root[data-color-theme="cool-gray"] {
+  --bg: #f1f5f9; --surface: #ffffff; --border: #cbd5e1;
+  --text: #0f172a; --muted: #64748b;
+  --accent: #2563eb; --accent-hover: #1d4ed8;
+  --code-bg: #f8fafc;
+  --header-bg: #1e293b; --header-text: #e2e8f0;
+  --ok: #16a34a; --err: #dc2626; --warn: #d97706;
+  --hl-red: #fecaca; --hl-green: #bbf7d0; --hl-blue: #bfdbfe;
+  --hl-yellow: #fef08a; --hl-purple: #ddd6fe;
+  --tok-keyword: #2563eb; --tok-string: #16a34a; --tok-number: #7c3aed;
+  --tok-comment: #94a3b8; --tok-fn: #0369a1; --tok-punct: #64748b;
+  --tok-class: #db2777; --tok-op: #ea580c;
+}
+[data-color-theme="cool-gray"][data-theme="dark"] {
+  --bg: #0f172a; --surface: #1e293b; --border: #334155;
+  --text: #e2e8f0; --muted: #94a3b8;
+  --accent: #60a5fa; --accent-hover: #93bbfd;
+  --code-bg: #162032;
+  --header-bg: #020617; --header-text: #e2e8f0;
+  --ok: #4ade80; --err: #f87171; --warn: #fbbf24;
+  --hl-red: #7f1d1d; --hl-green: #14532d; --hl-blue: #1e3a5f;
+  --hl-yellow: #713f12; --hl-purple: #581c87;
+  --tok-keyword: #60a5fa; --tok-string: #4ade80; --tok-number: #c4b5fd;
+  --tok-comment: #475569; --tok-fn: #38bdf8; --tok-punct: #94a3b8;
+  --tok-class: #f9a8d4; --tok-op: #fb923c;
+}
+
+/* ---- forest (森绿) ---- */
+[data-color-theme="forest"][data-theme="dark"],
+:root[data-color-theme="forest"] {
+  --bg: #f4f7f0; --surface: #fafcf7; --border: #c5d1b8;
+  --text: #1a2e1a; --muted: #5a6e52;
+  --accent: #2d6a2e; --accent-hover: #1b4d1c;
+  --code-bg: #edf2e8;
+  --header-bg: #1a2e1a; --header-text: #d4e4cc;
+  --ok: #2d6a2e; --err: #b91c1c; --warn: #a16207;
+  --hl-red: #fecaca; --hl-green: #bbf7d0; --hl-blue: #bae6fd;
+  --hl-yellow: #fef08a; --hl-purple: #ddd6fe;
+  --tok-keyword: #2d6a2e; --tok-string: #4d7c0f; --tok-number: #7c3aed;
+  --tok-comment: #8a9a82; --tok-fn: #1a5276; --tok-punct: #6b7280;
+  --tok-class: #be185d; --tok-op: #c2410c;
+}
+[data-color-theme="forest"][data-theme="dark"] {
+  --bg: #121e12; --surface: #1a2e1a; --border: #2d4a2d;
+  --text: #c8d6c0; --muted: #7a9470;
+  --accent: #6bc96b; --accent-hover: #8fd88f;
+  --code-bg: #162016;
+  --header-bg: #0a140a; --header-text: #c8d6c0;
+  --ok: #6bc96b; --err: #f87171; --warn: #fbbf24;
+  --hl-red: #6b2424; --hl-green: #2a4a1a; --hl-blue: #234852;
+  --hl-yellow: #5c4419; --hl-purple: #4a2f5c;
+  --tok-keyword: #6bc96b; --tok-string: #a3d977; --tok-number: #d4a774;
+  --tok-comment: #4a5a44; --tok-fn: #82c9b8; --tok-punct: #7a9470;
+  --tok-class: #d4a0c0; --tok-op: #e8a384;
+}
+
+/* ---- rosegold (玫瑰金) ---- */
+[data-color-theme="rosegold"][data-theme="dark"],
+:root[data-color-theme="rosegold"] {
+  --bg: #fbf5f8; --surface: #fffbfe; --border: #f0d8e0;
+  --text: #3d242e; --muted: #9a7a85;
+  --accent: #c06070; --accent-hover: #a84858;
+  --code-bg: #f6edf2;
+  --header-bg: #3d2028; --header-text: #fae8e0;
+  --ok: #15803d; --err: #be123c; --warn: #b45309;
+  --hl-red: #fecaca; --hl-green: #bbf7d0; --hl-blue: #bae6fd;
+  --hl-yellow: #fef08a; --hl-purple: #ddd6fe;
+  --tok-keyword: #be4d6a; --tok-string: #15803d; --tok-number: #9333ea;
+  --tok-comment: #b0a098; --tok-fn: #1e40af; --tok-punct: #8a7060;
+  --tok-class: #be185d; --tok-op: #c2410c;
+}
+[data-color-theme="rosegold"][data-theme="dark"] {
+  --bg: #1e1418; --surface: #2a1e22; --border: #4a3640;
+  --text: #f0dde0; --muted: #a08088;
+  --accent: #e8a0aa; --accent-hover: #f0b8c0;
+  --code-bg: #1a1216;
+  --header-bg: #120a0e; --header-text: #f0dde0;
+  --ok: #6bc96b; --err: #f87171; --warn: #fbbf24;
+  --hl-red: #6b2424; --hl-green: #3d4f1f; --hl-blue: #234852;
+  --hl-yellow: #5c4419; --hl-purple: #4a2f5c;
+  --tok-keyword: #e8a0aa; --tok-string: #9bc28b; --tok-number: #d4a774;
+  --tok-comment: #5a4850; --tok-fn: #f5d6a0; --tok-punct: #a08088;
+  --tok-class: #e8b0c8; --tok-op: #f0a890;
+}
+
+/* ---- violet (紫罗兰) ---- */
+[data-color-theme="violet"][data-theme="dark"],
+:root[data-color-theme="violet"] {
+  --bg: #f7f4fc; --surface: #fdfbff; --border: #e2d7f2;
+  --text: #2e1a47; --muted: #7c6a95;
+  --accent: #7c3aed; --accent-hover: #6d28d9;
+  --code-bg: #f2ecfb;
+  --header-bg: #2e1a47; --header-text: #ece4f7;
+  --ok: #15803d; --err: #be123c; --warn: #b45309;
+  --hl-red: #fecaca; --hl-green: #bbf7d0; --hl-blue: #bae6fd;
+  --hl-yellow: #fef08a; --hl-purple: #ddd6fe;
+  --tok-keyword: #7c3aed; --tok-string: #15803d; --tok-number: #c026d3;
+  --tok-comment: #9b8fb0; --tok-fn: #1e40af; --tok-punct: #7c6a95;
+  --tok-class: #be185d; --tok-op: #c2410c;
+}
+[data-color-theme="violet"][data-theme="dark"] {
+  --bg: #17121f; --surface: #221a2e; --border: #3b2f52;
+  --text: #e7ddf5; --muted: #9585ad;
+  --accent: #a78bfa; --accent-hover: #c4b5fd;
+  --code-bg: #14101b;
+  --header-bg: #0f0b17; --header-text: #e7ddf5;
+  --ok: #6bc96b; --err: #f87171; --warn: #fbbf24;
+  --hl-red: #6b2424; --hl-green: #2a4a1a; --hl-blue: #234852;
+  --hl-yellow: #5c4419; --hl-purple: #4a2f6c;
+  --tok-keyword: #c4b5fd; --tok-string: #9bc28b; --tok-number: #e879f9;
+  --tok-comment: #55486a; --tok-fn: #93bbfd; --tok-punct: #9585ad;
+  --tok-class: #f0a0d0; --tok-op: #f0a890;
+}
+
+/* ---- obsidian (墨黑) ---- */
+[data-color-theme="obsidian"][data-theme="dark"],
+:root[data-color-theme="obsidian"] {
+  --bg: #ffffff; --surface: #f8f8f8; --border: #e4e4e4;
+  --text: #111111; --muted: #666666;
+  --accent: #333333; --accent-hover: #111111;
+  --code-bg: #f0f0f0;
+  --header-bg: #111111; --header-text: #f0f0f0;
+  --ok: #15803d; --err: #b91c1c; --warn: #b45309;
+  --hl-red: #fecaca; --hl-green: #bbf7d0; --hl-blue: #bae6fd;
+  --hl-yellow: #fef08a; --hl-purple: #ddd6fe;
+  --tok-keyword: #333333; --tok-string: #15803d; --tok-number: #7c3aed;
+  --tok-comment: #999999; --tok-fn: #1e40af; --tok-punct: #666666;
+  --tok-class: #be185d; --tok-op: #c2410c;
+}
+[data-color-theme="obsidian"][data-theme="dark"] {
+  --bg: #000000; --surface: #0a0a0a; --border: #1a1a1a;
+  --text: #f0f0f0; --muted: #808080;
+  --accent: #d0d0d0; --accent-hover: #e8e8e8;
+  --code-bg: #050505;
+  --header-bg: #000000; --header-text: #f0f0f0;
+  --ok: #4ade80; --err: #f87171; --warn: #fbbf24;
+  --hl-red: #5c1a1a; --hl-green: #1a3d1a; --hl-blue: #1a2d3d;
+  --hl-yellow: #4a3a0a; --hl-purple: #3a1a4a;
+  --tok-keyword: #d0d0d0; --tok-string: #4ade80; --tok-number: #c4b5fd;
+  --tok-comment: #404040; --tok-fn: #60a5fa; --tok-punct: #666666;
+  --tok-class: #f0a0d0; --tok-op: #f8a870;
+}
+
+/* ===== font-role overrides =====
+ * Each role's --font-* variable can be repointed by a [data-font-<role>]
+ * attribute set from Settings (see FONT_ROLES in themes.ts). The empty-string
+ * default carries no attribute, so the :root stacks above stay in effect.
+ * Every stack keeps the same CJK/system tail so only the Latin face changes. */
+
+/* --- body --- */
+[data-font-body="source-serif"] {
+  --font-body: "Source Serif 4", Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
+}
+[data-font-body="eb-garamond"] {
+  --font-body: "EB Garamond", Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
+}
+[data-font-body="georgia"] {
+  --font-body: Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
+}
+[data-font-body="lora"] {
+  --font-body: "Lora", Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
+}
+[data-font-body="spectral"] {
+  --font-body: "Spectral", Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
+}
+[data-font-body="bitter"] {
+  --font-body: "Bitter", Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
+}
+
+/* --- statement --- */
+[data-font-statement="eb-garamond"] {
+  --font-statement: "EB Garamond", Georgia, "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "Noto Serif CJK SC", "Songti SC", serif;
+}
+[data-font-statement="source-serif"] {
+  --font-statement: "Source Serif 4", Georgia, "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "Noto Serif CJK SC", "Songti SC", serif;
+}
+[data-font-statement="lora"] {
+  --font-statement: "Lora", Georgia, "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "Noto Serif CJK SC", "Songti SC", serif;
+}
+[data-font-statement="spectral"] {
+  --font-statement: "Spectral", Georgia, "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "Noto Serif CJK SC", "Songti SC", serif;
+}
+[data-font-statement="libre-baskerville"] {
+  --font-statement: "Libre Baskerville", Georgia, "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "Noto Serif CJK SC", "Songti SC", serif;
+}
+
+/* --- display --- */
+[data-font-display="cormorant"] {
+  --font-display: "Cormorant Garamond", "Playfair Display", Georgia, "Noto Serif CJK SC", serif;
+}
+
+/* ===== activity heatmap tokens =====
+ * 5-step scale (0 = empty, 1-4 = increasing activity). Derived from each
+ * theme's --accent so the heatmap always reads as "this theme's color,
+ * deepening". Light themes use solid tints over the cream paper; dark themes
+ * brighten toward white. */
+:root,
+[data-color-theme][data-theme],
+:root[data-color-theme] {
+  --stats-heat-0: color-mix(in srgb, var(--text) 6%, var(--surface));
+  --stats-heat-1: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  --stats-heat-2: color-mix(in srgb, var(--accent) 55%, var(--surface));
+  --stats-heat-3: color-mix(in srgb, var(--accent) 80%, var(--surface));
+  --stats-heat-4: var(--accent);
+}
+[data-theme="dark"] {
+  --stats-heat-0: color-mix(in srgb, var(--text) 6%, transparent);
+  --stats-heat-1: color-mix(in srgb, var(--accent) 35%, transparent);
+  --stats-heat-2: color-mix(in srgb, var(--accent) 60%, transparent);
+  --stats-heat-3: color-mix(in srgb, var(--accent) 85%, transparent);
+  --stats-heat-4: color-mix(in srgb, var(--accent) 100%, white 10%);
+}

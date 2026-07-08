@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The terminal UI was written against an older @opentui API and is not
+    // maintained (see README). It gets its own tsconfig so the main `typecheck`
+    // stays green; run `bun run typecheck:tui` to see its (known, unfixed)
+    // errors if you want to revive it.
+    "jsxImportSource": "@opentui/react"
+  },
+  "include": ["src/index.tsx", "src/screens/**/*.tsx", "src/config.ts", "src/api.ts"],
+  "exclude": []
+}

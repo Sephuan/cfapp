@@ -1,0 +1,209 @@
+/* ---- selection toolbar ---- */
+.sel-toolbar {
+  position: fixed; z-index: 100;
+  background: var(--header-bg); color: var(--header-text);
+  border-radius: 8px; padding: 5px;
+  display: flex; align-items: center; gap: 2px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  font-size: 0.86rem; border: 1px solid rgba(255,255,255,0.08);
+}
+.sel-toolbar .swatch {
+  width: 22px; height: 22px; border-radius: 4px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.18); padding: 0;
+  transition: transform 0.1s;
+}
+.sel-toolbar .swatch.red    { background: var(--hl-red); }
+.sel-toolbar .swatch.green  { background: var(--hl-green); }
+.sel-toolbar .swatch.blue   { background: var(--hl-blue); }
+.sel-toolbar .swatch.yellow { background: var(--hl-yellow); }
+.sel-toolbar .swatch.purple { background: var(--hl-purple); }
+.sel-toolbar .swatch:hover { transform: scale(1.1); }
+.sel-toolbar .divider { width: 1px; height: 18px; background: rgba(255,255,255,0.18); margin: 0 4px; }
+.sel-toolbar .tbtn {
+  background: none; border: none; color: var(--header-text); cursor: pointer;
+  padding: 3px 9px; border-radius: 4px; font-size: 0.84rem; font-family: inherit;
+}
+.sel-toolbar .tbtn:hover { background: rgba(255,255,255,0.12); }
+
+/* ---- translation popover ---- */
+.tr-popover {
+  position: fixed; z-index: 99;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.22);
+  padding: 0.8rem 1rem; max-width: 460px; min-width: 240px;
+  font-size: 0.97rem; line-height: 1.6;
+}
+.tr-popover .tr-src { color: var(--muted); font-size: 0.78rem; margin-bottom: 0.35rem; font-style: italic; display: flex; align-items: center; gap: 0.35rem; }
+.tr-popover .tr-busy { color: var(--muted); font-style: italic; }
+.tr-popover .tr-body {
+  line-height: 1.75;
+  color: var(--tr-text);
+  font-family: var(--font-cjk);
+}
+.tr-popover .tr-body p { margin: 0 0 0.5rem; line-height: 1.75; }
+.tr-popover .tr-body p:last-child { margin-bottom: 0; }
+.tr-popover .tr-body code {
+  background: color-mix(in srgb, var(--tr-line) 20%, transparent);
+  padding: 0.05em 0.3em; border-radius: 3px; font-size: 0.92em;
+}
+.tr-popover .tr-body .katex { font-size: 1.05em; }
+
+/* ---- settings ---- */
+.settings { max-width: 1080px; margin: 0 auto; }
+.settings h2 {
+  font-family: var(--font-display);
+  font-style: italic; font-weight: 700;
+  font-size: 1.45rem; margin: 0 0 1rem; padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border); color: var(--text);
+}
+.settings .field { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 1rem; }
+.settings .field label { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.settings .field input {
+  padding: 0.55rem 0.75rem; font-size: 0.97rem; font-family: inherit;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text);
+}
+.settings .field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.settings .field .hint { font-size: 0.8rem; color: var(--muted); font-style: italic; }
+.settings .row { display: flex; gap: 0.7rem; align-items: center; margin-top: 1rem; }
+.settings .save-msg { color: var(--ok); font-size: 0.88rem; font-style: italic; }
+.settings .save-msg.err { color: var(--err); }
+
+/* theme toggle pill in topbar */
+.theme-toggle {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; padding: 0.18rem 0.55rem; font-size: 0.8rem;
+  cursor: pointer; color: var(--header-text);
+  font-family: var(--font-display);
+  font-style: italic; font-weight: 500; letter-spacing: 0.01em;
+}
+.theme-toggle:hover { background: rgba(255,255,255,0.14); }
+
+/* ---- annotation theme picker (Settings) ----
+ * Three swatches — each shows a mini preview of its translation palette.
+ * Picking one sets data-tr-theme on <html>; CSS variables recolor every
+ * existing .cf-tr block instantly, no React re-render needed. */
+.tr-picker { display: flex; gap: 0.7rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.tr-picker button {
+  flex: 1; min-width: 130px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text);
+  cursor: pointer; font-family: inherit; font-size: 0.9rem;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.tr-picker button:hover { border-color: var(--accent); }
+.tr-picker button[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.tr-picker .tr-pick-name { font-weight: 600; font-size: 0.92rem; }
+.tr-picker .tr-pick-hint { font-size: 0.76rem; color: var(--muted); font-style: italic; }
+.tr-picker .tr-pick-preview {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.35rem 0.5rem; border-left: 3px solid; border-radius: 0 4px 4px 0;
+  font-family: var(--font-cjk-label); font-size: 0.82rem;
+}
+.tr-picker .tr-pick-preview .seal {
+  font-weight: 700; font-size: 0.6rem; line-height: 1;
+  padding: 0.15rem 0.28rem; border-radius: 2px; letter-spacing: 0.04em;
+}
+/* Each button carries its own palette inline so the preview is honest. */
+
+/* ---- color theme picker (Settings) ----
+ * Mirrors .tr-picker layout but each swatch shows a mini preview of its
+ * palette: a stripe of header-bg → accent → surface, so the user can feel
+ * the palette before committing. */
+.theme-picker { display: flex; gap: 0.7rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.theme-picker button {
+  flex: 1; min-width: 130px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text);
+  cursor: pointer; font-family: inherit; font-size: 0.9rem;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.theme-picker button:hover { border-color: var(--accent); }
+.theme-picker button[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.theme-picker .tp-name { font-weight: 600; font-size: 0.92rem; }
+.theme-picker .tp-hint { font-size: 0.76rem; color: var(--muted); font-style: italic; }
+.theme-picker .tp-swatch {
+  height: 20px; border-radius: 4px; overflow: hidden; display: flex;
+}
+.theme-picker .tp-swatch span { flex: 1; }
+
+/* ---- font info table (Settings) ---- */
+.font-info { border-collapse: collapse; width: 100%; font-size: 0.88rem; margin-top: 0.5rem; }
+.font-info th, .font-info td {
+  text-align: left; padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+.font-info th { font-weight: 600; color: var(--text); white-space: nowrap; width: 110px; }
+.font-info td { color: var(--muted); word-break: break-word; }
+.font-info .fi-loaded { color: var(--ok); font-weight: 600; font-size: 0.78rem; }
+.font-info .fi-fallback { color: var(--warn); font-weight: 600; font-size: 0.78rem; }
+.font-info .fi-sample { font-size: 1.05rem; color: var(--text); }
+
+/* ---- font role picker (Settings) ----
+ * Compact: a native dropdown to pick the face + a live load badge, then a
+ * single honest Latin+CJK preview bar rendered in the *selected* family
+ * (falling through the real stack). One row per role instead of a card grid,
+ * so the section stays short however many fonts a role offers. */
+.font-row { display: flex; align-items: center; gap: 0.55rem; }
+.font-select {
+  flex: 1; min-width: 0;
+  padding: 0.5rem 0.65rem; font-size: 0.95rem; font-family: inherit;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.font-select:hover { border-color: var(--accent); }
+.font-select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.fp-status {
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.02em;
+  padding: 0.14rem 0.5rem; border-radius: 10px; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.fp-loaded   { color: var(--ok);   background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.fp-fallback { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.fp-loading  { color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.fp-system   { color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.font-preview {
+  font-size: 1.3rem; line-height: 1.4; color: var(--text);
+  padding: 0.5rem 0.75rem; letter-spacing: 0.01em;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+.fp-hint { font-size: 0.76rem; color: var(--muted); font-style: italic; }
+
+/* ---- light/dark mode toggle (Settings) ---- */
+.mode-toggle { display: flex; gap: 0.7rem; margin-top: 0.3rem; }
+.mode-toggle .mode-btn {
+  flex: 1; padding: 0.6rem 0.8rem; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); cursor: pointer; font-family: inherit; font-size: 0.9rem;
+  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+}
+.mode-toggle .mode-btn:hover { border-color: var(--accent); }
+.mode-toggle .mode-btn[aria-pressed="true"] {
+  border-color: var(--accent); font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.mode-toggle .mode-ico { font-size: 1.1rem; }
+
+/* ---- primary action button (Settings Save) ---- */
+.settings .primary {
+  background: var(--accent); color: #fff; border: 1px solid var(--accent);
+  padding: 0.5rem 1.3rem; border-radius: 6px; cursor: pointer;
+  font-weight: 600; font-family: inherit; font-size: 0.95rem;
+  transition: background 0.12s, transform 0.08s;
+}
+.settings .primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.settings .primary:active { transform: translateY(1px); }

@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# cfapp — launch backend (Bun) + frameless app window (Chromium).
+# Pass --debug to keep the server in the foreground without spawning a browser.
+
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+cd "$ROOT"
+
+DEBUG=0
+for a in "$@"; do
+  case "$a" in
+    --debug|-d) DEBUG=1 ;;
+  esac
+done
+
+# --- preflight ----------------------------------------------------------------
+if ! command -v bun >/dev/null 2>&1; then
+  echo "cfapp: 'bun' not found in PATH. Install from https://bun.sh" >&2
+  exit 1
+fi
+
+# pick port (env override; 0 = auto)
+PORT="${PORT:-0}"
+if [[ "$PORT" == "0" ]]; then
+  PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()' 2>/dev/null \
+        || echo 38271)"
+fi
+
+LOG="${XDG_RUNTIME_DIR:-/tmp}/cfapp-$PORT.log"
+: > "$LOG"
+
+# --- debug: server in foreground ---------------------------------------------
+if [[ "$DEBUG" == "1" ]]; then
+  echo "cfapp: debug mode — server on http://127.0.0.1:$PORT/  (Ctrl+C to stop)" >&2
+  exec env PORT="$PORT" bun run "$ROOT/src/server.ts"
+fi
+
+# --- start server in background ----------------------------------------------
+( env PORT="$PORT" bun run "$ROOT/src/server.ts" >>"$LOG" 2>&1 ) &
+SERVER_PID=$!
+trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT INT TERM
+
+# --- wait for port (up to ~8s) ------------------------------------------------
+ready=0
+for _ in $(seq 1 80); do
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then break; fi
+  if (exec 3<>/dev/tcp/127.0.0.1/"$PORT") 2>/dev/null; then
+    exec 3<&- 3>&-
+    ready=1
+    break
+  fi
+  sleep 0.1
+done
+
+if [[ "$ready" != "1" ]]; then
+  echo "cfapp: server failed to start on port $PORT. Log tail:" >&2
+  echo "----- $LOG -----" >&2
+  tail -n 40 "$LOG" >&2 || true
+  echo "-----------------" >&2
+  echo "Tip: run 'bash ./bin/cfapp --debug' to see live errors." >&2
+  exit 1
+fi
+
+URL="http://127.0.0.1:$PORT/"
+
+# --- pick a browser -----------------------------------------------------------
+BROWSER=""
+for c in chromium google-chrome chrome microsoft-edge brave-browser firefox; do
+  if command -v "$c" >/dev/null 2>&1; then BROWSER="$c"; break; fi
+done
+
+if [[ -z "$BROWSER" ]]; then
+  echo "cfapp: no browser found. Open $URL manually." >&2
+  echo "cfapp: install chromium for the frameless --app window." >&2
+  wait "$SERVER_PID"
+  exit 0
+fi
+
+PROFILE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/cfapp-app"
+mkdir -p "$PROFILE_DIR"
+
+echo "cfapp: serving $URL via $BROWSER" >&2
+
+case "$BROWSER" in
+  firefox)
+    "$BROWSER" -new-window "$URL" >/dev/null 2>&1 ;;
+  *)
+    # --app=URL gives a frameless window (no tabs / address bar / min-max-close).
+    # Separate user-data-dir keeps cookies isolated and prevents reusing an
+    # existing chromium session that would open in a normal tabbed window.
+    "$BROWSER" \
+      --app="$URL" \
+      --user-data-dir="$PROFILE_DIR" \
+      --class="cfapp" \
+      --no-first-run --no-default-browser-check \
+      --disable-features=TranslateUI \
+      >/dev/null 2>&1 ;;
+esac
+
+# Browser exits → kill server (trap handles it).

@@ -1,0 +1,48 @@
+{
+  "name": "cfapp-ts",
+  "version": "1.0.0",
+  "description": "Codeforces client with web UI, AI translation, and Cloudflare bypass",
+  "author": "Sephuan <sephuan@users.noreply.github.com>",
+  "homepage": "https://github.com/Sephuan/cfapp",
+  "module": "src/index.tsx",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "cfapp": "./bin/cfapp"
+  },
+  "scripts": {
+    "dev": "bun run --hot src/server.ts",
+    "server": "bun run src/server.ts",
+    "start": "electron .",
+    "app": "bash ./bin/cfapp",
+    "tui": "bun run src/index.tsx",
+    "auth": "bun run scripts/auth-codeforces.ts",
+    "seed": "bun run scripts/seed-config.ts",
+    "typecheck": "tsc --noEmit",
+    "typecheck:tui": "tsc --noEmit -p tsconfig.tui.json",
+    "test": "bun test",
+    "build:web": "bun run scripts/build-web.ts",
+    "build": "bun run build:web && electron-builder --linux",
+    "build:rpm": "bun run build:web && electron-builder --linux rpm",
+    "build:deb": "bun run build:web && electron-builder --linux deb",
+    "build:appimage": "bun run build:web && electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.4.0",
+    "@opentui/react": "^0.4.0",
+    "katex": "^0.16.11",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  }
+}

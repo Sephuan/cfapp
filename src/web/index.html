@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cfapp — Codeforces</title>
+    <script>
+      // Server route, not a build-time asset — inject at runtime so Bun's HTML
+      // bundler doesn't try to resolve "/fonts/fonts.css" on disk.
+      // We deliberately do NOT load fonts.bunny.net here: the user runs a
+      // TUN-mode proxy and bunny.net responses occasionally come back junk,
+      // which can shadow the local @font-face for the same family name.
+      // All Latin/CJK fonts come from src/fonts.ts (cached under ~/.cache/cfapp/fonts/).
+      (function () {
+        var l = document.createElement("link");
+        l.rel = "stylesheet";
+        l.href = "/fonts/fonts.css";
+        document.head.appendChild(l);
+      })();
+      // Restore the translation-annotation palette before paint so saved
+      // .cf-tr blocks don't flash the default amber. Mirrors applyTrTheme in
+      // app.tsx: amber = no attribute (CSS :root fallback wins).
+      (function () {
+        try {
+          var t = localStorage.getItem("cfapp:tr-theme");
+          if (t === "ink" || t === "indigo") {
+            document.documentElement.setAttribute("data-tr-theme", t);
+          }
+          // Restore each font role's saved pick before first paint so text
+          // never flashes the default face. Keep this allow-list in sync with
+          // FONT_ROLES in themes.ts (id "" = default, no attribute).
+          // roleKey -> array of valid non-default choice ids.
+          var FONT_ROLES = {
+            body:      ["source-serif", "eb-garamond", "lora", "spectral", "bitter", "georgia"],
+            statement: ["eb-garamond", "source-serif", "lora", "spectral", "libre-baskerville"],
+            display:   ["cormorant"],
+          };
+          Object.keys(FONT_ROLES).forEach(function (key) {
+            var v = localStorage.getItem("cfapp:font-" + key);
+            if (v && FONT_ROLES[key].indexOf(v) !== -1) {
+              document.documentElement.setAttribute("data-font-" + key, v);
+            }
+          });
+          // Legacy key migration: the old single-font picker stored
+          // "cfapp:body-font". Honor it once, then rewrite to the new key.
+          var legacy = localStorage.getItem("cfapp:body-font");
+          if (legacy && FONT_ROLES.body.indexOf(legacy) !== -1
+              && !localStorage.getItem("cfapp:font-body")) {
+            document.documentElement.setAttribute("data-font-body", legacy);
+            localStorage.setItem("cfapp:font-body", legacy);
+            localStorage.removeItem("cfapp:body-font");
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous" />
+    <link rel="stylesheet" href="./styles/themes.css" />
+    <link rel="stylesheet" href="./styles/base.css" />
+    <link rel="stylesheet" href="./styles/problem.css" />
+    <link rel="stylesheet" href="./styles/settings.css" />
+    <link rel="stylesheet" href="./styles/stats.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./app.tsx"></script>
+  </body>
+</html>

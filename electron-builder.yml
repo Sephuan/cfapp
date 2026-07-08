@@ -1,0 +1,32 @@
+appId: com.sephuan.cfapp
+productName: cfapp
+directories:
+  output: dist
+
+asar: false
+
+files:
+  - electron/**/*
+  - src/**/*
+  - dist-web/**/*
+  - node_modules/katex/**/*
+  - node_modules/react/**/*
+  - node_modules/react-dom/**/*
+  - node_modules/scheduler/**/*
+  - package.json
+
+extraResources:
+  - from: .bun-packaged
+    to: bun
+
+linux:
+  icon: build/icon.png
+  category: Network
+  target:
+    - rpm
+    - deb
+    - AppImage
+
+rpm:
+  depends:
+    - curl
