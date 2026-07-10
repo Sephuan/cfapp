@@ -9,8 +9,8 @@ import { extractLoggedInHandle } from "./api/html";
 
 describe("extractLoggedInHandle", () => {
   test("reads the inline `var handle` bootstrap", () => {
-    const html = `<script>Codeforces.ping("/data/update-online"); var handle = "myhandle";</script>`;
-    expect(extractLoggedInHandle(html)).toBe("myhandle");
+    const html = `<script>Codeforces.ping("/data/update-online"); var handle = "huanjiu162";</script>`;
+    expect(extractLoggedInHandle(html)).toBe("huanjiu162");
   });
 
   test("inline handle beats a more-frequent stranger profile link", () => {
@@ -18,13 +18,13 @@ describe("extractLoggedInHandle", () => {
     // ratings table, the viewer's own /profile link only twice — but the
     // inline bootstrap is authoritative.
     const html = `
-      <script>var handle = "myhandle";</script>
+      <script>var handle = "huanjiu162";</script>
       <a href="/profile/maroonrk">By maroonrk</a>
       <a href="/profile/maroonrk">maroonrk</a>
       <a href="/profile/maroonrk">maroonrk</a>
-      <a href="/profile/myhandle">myhandle</a>
-      <a href="/profile/myhandle">myhandle</a>`;
-    expect(extractLoggedInHandle(html)).toBe("myhandle");
+      <a href="/profile/huanjiu162">huanjiu162</a>
+      <a href="/profile/huanjiu162">huanjiu162</a>`;
+    expect(extractLoggedInHandle(html)).toBe("huanjiu162");
   });
 
   test("tolerates single quotes and loose whitespace", () => {

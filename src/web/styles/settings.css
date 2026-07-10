@@ -65,6 +65,20 @@
   background: var(--surface); color: var(--text);
 }
 .settings .field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.settings .field textarea {
+  padding: 0.55rem 0.75rem; font-family: inherit;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text);
+}
+.settings .field textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+/* inline text-link action (e.g. "reset to default") — sits on the label row */
+.settings .link-btn {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-family: inherit; font-size: 0.8rem; color: var(--accent);
+  text-decoration: none; line-height: 1;
+}
+.settings .link-btn:hover { text-decoration: underline; }
+.settings .link-btn:disabled { color: var(--muted); cursor: default; text-decoration: none; opacity: 0.6; }
 .settings .field .hint { font-size: 0.8rem; color: var(--muted); font-style: italic; }
 .settings .row { display: flex; gap: 0.7rem; align-items: center; margin-top: 1rem; }
 .settings .save-msg { color: var(--ok); font-size: 0.88rem; font-style: italic; }

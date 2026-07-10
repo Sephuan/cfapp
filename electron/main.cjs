@@ -424,14 +424,19 @@ app.whenReady().then(async () => {
   attachCookieSync();
   // Purge stale cf_clearance BEFORE the window opens so webview doesn't
   // send a cookie issued under an older UA (which would trigger a CF loop).
+  // This is a purely local cookie-jar operation (no network), so it's cheap.
   await purgeStaleClearance();
-  // Also probe whether the current cf_clearance is actually accepted by CF.
-  // If it's been revoked (mid-session revocation, fingerprint drift, etc.)
-  // and we still send it, CF returns 403 on every request. Better to drop
-  // it now and let webview re-solve Turnstile once.
-  await probeAndPurgeBadClearance();
   await syncCfCookiesToFile();
   await createWindow();
+
+  // Probe whether the current cf_clearance is still accepted by CF. This makes
+  // a LIVE request to codeforces.com (up to an 8s timeout), so it must NOT
+  // block window creation — when the VPN is down or slow that would stall the
+  // whole app for seconds on every launch. The window only loads the local
+  // server, so run the probe in the background after the UI is already up. If
+  // the cookie turns out to be revoked it gets purged a beat later and the
+  // webview re-solves Turnstile once, exactly as before.
+  probeAndPurgeBadClearance().then(syncCfCookiesToFile).catch(() => {});
 
   // Periodically re-probe — CF can revoke cf_clearance mid-session (fingerprint
   // drift, Turnstile re-check fail, etc). Server-side /api/* calls won't trigger

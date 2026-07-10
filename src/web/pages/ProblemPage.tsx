@@ -1,7 +1,7 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Contest, Problem } from "../../api";
-import { useFetchJSON } from "../hooks";
+import { useFetchJSON, type LocalStorageCache } from "../hooks";
 import { CodeEditor, PRISM_LANG_BY_CF_ID } from "../CodeEditor";
 import {
   type HLColor, type HLRange, type TrEntry,
@@ -9,6 +9,7 @@ import {
   findTrAncestor, lsKey, mergeAddRange, mergeClearRange,
   rangeToOffsets, rangeToTexSource,
 } from "../highlight";
+import { useLang, getLang, t } from "../i18n";
 
 type Statement = {
   title: string; timeLimit: string; memoryLimit: string;
@@ -16,6 +17,61 @@ type Statement = {
   samples: { input: string; output: string }[]; noteHtml: string;
 };
 type Lang = { name: string; id: number };
+
+// One translation call that transparently handles both server modes:
+//   • streaming  → text/event-stream, onUpdate fires per frame (incremental HTML)
+//   • buffered   → application/json, onUpdate fires once with the final HTML
+// Resolves to the final { translation, html }, or throws on error. `onUpdate`
+// lets the caller paint partial output live; the resolved value is what gets
+// persisted.
+type TrResult = { translation: string; html: string };
+async function requestTranslate(
+  text: string,
+  onUpdate: (partial: TrResult) => void,
+): Promise<TrResult> {
+  // cache: "no-store" + a per-request nonce: Electron's Chromium keeps a disk
+  // HTTP cache and is known to serve a stale/heuristic-fresh entry for a
+  // repeated POST to the same URL, which hands the renderer a dead response
+  // it then waits on forever ("translation stuck on busy"). The nonce makes
+  // every request a distinct cache key; no-store forbids storing at all.
+  const r = await fetch(`/api/translate?_=${Date.now()}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+    cache: "no-store",
+  });
+  const ctype = r.headers.get("content-type") || "";
+  if (!ctype.includes("text/event-stream")) {
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    const res = { translation: j.translation ?? "", html: j.html ?? escapePlain(j.translation ?? "") };
+    onUpdate(res);
+    return res;
+  }
+  // SSE: parse `data: {…}\n\n` frames as they arrive.
+  const reader = r.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let last: TrResult = { translation: "", html: "" };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const frames = buf.split("\n\n");
+    buf = frames.pop() ?? "";
+    for (const frame of frames) {
+      const line = frame.split("\n").find(l => l.startsWith("data:"));
+      if (!line) continue;
+      let obj: any;
+      try { obj = JSON.parse(line.slice(5).trim()); } catch { continue; }
+      if (obj.error) throw new Error(obj.error);
+      last = { translation: obj.translation ?? last.translation, html: obj.html ?? last.html };
+      onUpdate(last);
+    }
+  }
+  return last;
+}
+
 
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false);
@@ -88,6 +144,7 @@ function TrPopover(props: {
   x: number; y: number; text: string; translation: string | null; html: string | null; error: string | null;
   onClose: () => void;
 }) {
+  const [lang] = useLang();
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -108,8 +165,8 @@ function TrPopover(props: {
       </div>
       {props.error
         ? <div style={{ color: "var(--err)" }}>{props.error}</div>
-        : props.translation == null
-          ? <div className="tr-busy">翻译中…</div>
+        : !props.translation
+          ? <div className="tr-busy">{t(lang, "tr.busy")}</div>
           : props.html
             ? <div className="tr-body" dangerouslySetInnerHTML={{ __html: props.html }} />
             : <div className="tr-body" style={{ whiteSpace: "pre-wrap" }}>{props.translation}</div>}
@@ -118,8 +175,13 @@ function TrPopover(props: {
 }
 
 // ----- problem page -----
+// Persist each problem's statement (URL-keyed per contest/problem) so a
+// revisited problem opens instantly and stays readable offline; refreshes in
+// the background.
+const STATEMENT_CACHE: LocalStorageCache = { keyPrefix: "cfapp_statement_" };
+
 export function ProblemPage({ contest, problem, onOpenSubmitTab, refreshTick }: { contest: Contest; problem: Problem; onOpenSubmitTab: (url: string, code: string, problemIndex: string, langId?: number) => void; refreshTick: number }) {
-  const { data, err, loading } = useFetchJSON<Statement>(`/api/contests/${contest.id}/problem/${problem.index}`, refreshTick);
+  const { data, err, loading } = useFetchJSON<Statement>(`/api/contests/${contest.id}/problem/${problem.index}`, refreshTick, STATEMENT_CACHE);
   const { data: langs } = useFetchJSON<Lang[]>("/api/languages");
   const [code, setCode] = useState("");
   const [langId, setLangId] = useState<number>(() => {
@@ -217,15 +279,22 @@ export function ProblemPage({ contest, problem, onOpenSubmitTab, refreshTick }: 
   const persistTrEntries = useCallback((next: TrEntry[]) => {
     if (!data) return;
     const baseHash = String(data.statementHtml.length + data.inputHtml.length + data.outputHtml.length);
+    // Drop in-flight (pending) entries: a half-finished translation has no
+    // value after a reload, and persisting one would re-insert a "busy" block
+    // that never resolves.
+    const stable = next.filter((e) => !e.pending);
     try {
       localStorage.setItem(lsKey(contest.id, problem.index, "tr"),
-        JSON.stringify({ hash: baseHash, entries: next }));
+        JSON.stringify({ hash: baseHash, entries: stable }));
     } catch {}
   }, [data, contest.id, problem.index]);
 
   const removeTrEntry = useCallback((entry: TrEntry) => {
+    // Match by stable id when present (a pending or finalized entry carries
+    // one); fall back to the offset+src triple for legacy persisted entries
+    // that predate the id field.
     const next = trEntriesRef.current.filter(
-      (e) => !(e.start === entry.start && e.end === entry.end && e.src === entry.src),
+      (e) => entry.id ? e.id !== entry.id : !(e.start === entry.start && e.end === entry.end && e.src === entry.src),
     );
     setTrEntries(next);
     persistTrEntries(next);
@@ -305,13 +374,11 @@ export function ProblemPage({ contest, problem, onOpenSubmitTab, refreshTick }: 
     const rect = range.getBoundingClientRect();
     setPop({ x: rect.left, y: rect.bottom + 6, text, tr: null, html: null, err: null });
     try {
-      const r = await fetch("/api/translate", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
+      const res = await requestTranslate(text, (partial) => {
+        // Streaming: flip out of the busy state and paint the growing HTML.
+        setPop(p => p && { ...p, tr: partial.translation, html: partial.html });
       });
-      const j = await r.json();
-      if (j.error) setPop(p => p && { ...p, err: j.error });
-      else setPop(p => p && { ...p, tr: j.translation, html: j.html ?? null });
+      setPop(p => p && { ...p, tr: res.translation, html: res.html });
     } catch (e: any) {
       setPop(p => p && { ...p, err: e.message });
     }
@@ -327,51 +394,38 @@ export function ProblemPage({ contest, problem, onOpenSubmitTab, refreshTick }: 
     // Capture article-space offsets up front so we can persist + replay.
     const offsets = rangeToOffsets(articleRef.current, range);
     if (!offsets) return;
-    // Show a transient loading block immediately. Once the translation
-    // returns, save it as a TrEntry and let the replay effect re-render
-    // (this also dedupes against the loading block which we remove first).
-    let anchor: Node | null = range.endContainer;
-    while (anchor && anchor !== articleRef.current && (anchor.nodeType !== 1 ||
-      !["P", "DIV", "LI"].includes((anchor as HTMLElement).tagName))) {
-      anchor = anchor.parentNode;
-    }
-    const loading = document.createElement("div");
-    loading.className = "cf-tr cf-tr-loading";
-    loading.innerHTML = `<span class="cf-tr-label">译</span><span class="cf-tr-body">翻译中…</span>`;
-    if (anchor && anchor !== articleRef.current && anchor.parentNode) {
-      anchor.parentNode.insertBefore(loading, (anchor as ChildNode).nextSibling);
-    } else {
-      range.collapse(false);
-      range.insertNode(loading);
-    }
+    // Render the translation as a *pending* TrEntry that the repaint effect
+    // owns — just like every finished translation. This is the fix for
+    // "translation vanishes mid-stream then reappears": the old code inserted a
+    // free-floating DOM node that the repaint effect's `innerHTML = html` reset
+    // wiped whenever ranges/trEntries changed. Now the in-flight block lives in
+    // state, survives the repaint, and is updated in place as tokens arrive.
+    const id = `tr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const busyHtml = `<span class="cf-tr-busy">${t(getLang(), "tr.busy")}</span>`;
+    setTrEntries((prev) => [...prev, { id, start: offsets.start, end: offsets.end, src: text, html: busyHtml, pending: true }]);
     try {
-      const r = await fetch("/api/translate", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      const j = await r.json();
-      loading.remove();
-      if (j.error) {
-        const errBlock = document.createElement("div");
-        errBlock.className = "cf-tr cf-tr-loading";
-        errBlock.innerHTML = `<span class="cf-tr-label">译</span><span class="cf-tr-body">翻译失败: ${j.error}</span>`;
-        if (anchor && anchor !== articleRef.current && anchor.parentNode) {
-          anchor.parentNode.insertBefore(errBlock, (anchor as ChildNode).nextSibling);
+      const res = await requestTranslate(text, (partial) => {
+        if (partial.html) {
+          setTrEntries((prev) => prev.map((e) => (e.id === id ? { ...e, html: partial.html } : e)));
         }
-        setTimeout(() => errBlock.remove(), 4000);
-        return;
-      }
-      const entry: TrEntry = {
-        start: offsets.start,
-        end: offsets.end,
-        src: text,
-        html: j.html ?? escapePlain(j.translation ?? ""),
-      };
-      const next = [...trEntriesRef.current, entry];
-      setTrEntries(next);
-      persistTrEntries(next);
-    } catch {
-      loading.remove();
+      });
+      // Compute the committed array once so persist sees the same entries the
+      // state will hold (reading trEntriesRef here would race — it only updates
+      // after the setState-triggered re-render).
+      setTrEntries((prev) => {
+        const next = prev.map((e) => (e.id === id
+          ? { id, start: offsets.start, end: offsets.end, src: text, html: res.html || escapePlain(res.translation ?? "") }
+          : e));
+        persistTrEntries(next.filter((e) => !e.pending));
+        return next;
+      });
+    } catch (e: any) {
+      const msg = (e?.message ?? "").replace(/[&<>"]/g, (c: string) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+      const errHtml = `${t(getLang(), "tr.failed")}: ${msg}`;
+      setTrEntries((prev) => prev.map((entry) => (entry.id === id ? { ...entry, html: errHtml, pending: true } : entry)));
+      setTimeout(() => {
+        setTrEntries((prev) => prev.filter((entry) => entry.id !== id));
+      }, 4000);
     }
   };
 

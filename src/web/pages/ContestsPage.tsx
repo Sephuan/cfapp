@@ -1,15 +1,20 @@
 import { useMemo, useState } from "react";
 import type { Contest } from "../../api";
-import { useFetchJSON } from "../hooks";
+import { useFetchJSON, type LocalStorageCache } from "../hooks";
+
+// Persist the contest list + AC summary so the homepage paints instantly on
+// every launch (and stays visible if the network drops), refreshing in the bg.
+const CONTESTS_CACHE: LocalStorageCache = { keyPrefix: "cfapp_contests_" };
+const AC_CACHE: LocalStorageCache = { keyPrefix: "cfapp_ac_" };
 
 export function ContestsPage({ onPick, refreshTick }: { onPick: (c: Contest) => void; refreshTick: number }) {
-  const { data, err, loading } = useFetchJSON<Contest[]>("/api/contests", refreshTick);
+  const { data, err, loading } = useFetchJSON<Contest[]>("/api/contests", refreshTick, CONTESTS_CACHE);
   // Persisted x/y solve counts (long-term store). y=0 means we don't know
   // the problem count yet (user hasn't opened that contest's problems list).
   // /api/ac-sync pulls the full submission history so every contest's AC count
   // fills in at once; pressing the main refresh re-pulls (?refresh=1).
   const { data: acSummary } = useFetchJSON<Record<string, { ac: number; total: number }>>(
-    "/api/ac-sync", refreshTick,
+    "/api/ac-sync", refreshTick, AC_CACHE,
   );
   const [q, setQ] = useState("");
   const filtered = useMemo(() => {

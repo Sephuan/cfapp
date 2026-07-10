@@ -14,9 +14,12 @@ import {
   validateCodeforcesSession,
   getMyContestStatus, scrapeMyContestStatus, getUserInfo, ratingTier,
   getUserStatus, getUserRatingHistory,
+  serveAvatar,
   CookieJar,
 } from "./api";
 import { mergeContestAc, mergeContestAcBulk, recordProblemCount, loadAcSummary, loadContestAc } from "./ac-store";
+import { buildTranslateMessages } from "./api/translate-prompt";
+import { buildTranslateStreamResponse } from "./api/translate-stream";
 import { primeFontCache, fontFile, fontsCss } from "./fonts";
 
 const DIST_WEB = join(import.meta.dir, "..", "dist-web");
@@ -36,14 +39,49 @@ function renderTranslationHtml(input: string): string {
     }
     return ` MATH${slots.length - 1} `;
   };
-  let s = input.replace(/\$\$\$([\s\S]+?)\$\$\$/g, (_, m) => stash(m, false));
+  // Our TeX extractor (highlight.ts) emits $$$…$$$ for display math and $…$ for
+  // inline, so render the triple-dollar form in displayMode → it centers as a
+  // block instead of sitting inline.
+  let s = input.replace(/\$\$\$([\s\S]+?)\$\$\$/g, (_, m) => stash(m, true));
   s = s.replace(/\$([^\n$]+?)\$/g, (_, m) => stash(m, false));
   s = escapeHtml(s);
+  // Inline code only. We deliberately do NOT render **bold** / *italic*:
+  // competitive-programming statements use "*" and "**" as literal content
+  // (string examples like "u****u", multiplication), and the translation prompt
+  // no longer asks the model to emit markdown emphasis — so any emphasis pass
+  // here only corrupts literal asterisks into <strong>/<em>.
   s = s.replace(/`([^`\n]+?)`/g, (_, m) => `<code>${m}</code>`);
-  s = s.replace(/\*\*([^\n*]+?)\*\*/g, "<strong>$1</strong>");
-  s = s.replace(/(^|[^*])\*([^\n*]+?)\*(?!\*)/g, "$1<em>$2</em>");
-  const paras = s.split(/\n{2,}/).map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`);
-  s = paras.join("");
+  // Blocks separated by a blank line become <p>; a block whose lines are all
+  // "- " / "* " / "• " bullets becomes a <ul> so list markers and indentation
+  // survive (statements use bullet lists that would otherwise collapse to bare
+  // <br> lines with no marker). The extractor emits "- " for each <li>.
+  // Paragraphs (blank line) + line breaks. List detection is lenient: the
+  // extractor emits "- " for each <li>, but a flash-lite model often drops the
+  // leading "- " on some lines, so a strict every-line check would fall back to
+  // <p> and leave a literal "- " in the text (ugly). We render a <ul> whenever a
+  // majority of the lines carry a bullet marker, and strip any leftover marker
+  // from non-list lines so a literal "- " never leaks through either way.
+  const blocks = s.split(/\n{2,}/).map((block) => {
+    const lines = block.split("\n");
+    // A run of "- " / "* " / "• " bullets renders as a <ul> so list markers and
+    // indentation survive. Models sometimes drop the leading marker on a few
+    // lines, so we use a majority test (>=2 marked AND marked > half) instead of
+    // a strict all-lines check — otherwise a near-list falls back to <p> and the
+    // surviving "- " shows up as a literal, ugly dash.
+    const marked = lines.filter((l) => /^\s*[-*•]\s+/.test(l)).length;
+    const isList = marked >= 2 && marked * 2 > lines.length;
+    if (isList) {
+      const items = lines
+        .map((l) => `<li>${l.replace(/^\s*[-*•]\s+/, "").trim()}</li>`)
+        .join("");
+      return `<ul class="cf-tr-list">${items}</ul>`;
+    }
+    // Even a non-list paragraph may carry stray markers (e.g. one bullet the
+    // model left among prose); strip them so no literal "-" leaks to the reader.
+    const clean = lines.map((l) => l.replace(/^\s*[-*•]\s+/, ""));
+    return `<p>${clean.join("<br>")}</p>`;
+  });
+  s = blocks.join("");
   s = s.replace(/ MATH(\d+) /g, (_, i) => slots[Number(i)] ?? "");
   return s;
 }
@@ -79,7 +117,13 @@ function saveDraft(contestId: string, index: string, code: string): void {
 const json = (data: unknown, init?: ResponseInit) =>
   new Response(JSON.stringify(data), {
     ...init,
-    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    // no-store: the Electron host keeps a Chromium HTTP cache (persist:cf
+    // partition, cleared only on launch). Without an explicit freshness
+    // directive, a 200 with no Cache-Control gets heuristic-cached, so a
+    // passive re-fetch (e.g. back-to-home /api/ac-sync without ?refresh=1)
+    // never reaches the server and serves a stale body — newly fetched
+    // problem counts don't show until a manual refresh changes the URL.
+    headers: { "content-type": "application/json", "cache-control": "no-store", ...(init?.headers ?? {}) },
   });
 
 let config: CFConfig = loadConfig();
@@ -128,12 +172,17 @@ const sanitize = (c: CFConfig) => ({
     baseUrl: c.ai.baseUrl,
     apiKey: c.ai.apiKey,
     model: c.ai.model,
+    targetLang: c.ai.targetLang,
+    promptTemplate: c.ai.promptTemplate,
+    stream: c.ai.stream,
   },
 });
 
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 3000),
-  idleTimeout: 60,
+  // Keep at Bun's max: CF standings can take 10+s, and a long AI translation
+  // may spin before the first byte — 60s would drop the socket mid-stream.
+  idleTimeout: 255,
   routes: {
     "/": () => new Response(indexHtml, {
       headers: { "content-type": "text/html; charset=utf-8" },
@@ -150,6 +199,20 @@ const server = Bun.serve({
       if (!f) return new Response("not found", { status: 404 });
       return new Response(f.body, {
         headers: { "content-type": f.type, "cache-control": "max-age=2592000" },
+      });
+    },
+
+    // Avatar proxy: fetch CF avatars through the app's (proxy-aware) network
+    // path and cache the bytes to disk, so they load without a VPN and survive
+    // restarts. ?u=<encoded CF avatar url>. Falls back to 404 (client shows
+    // initials) when the host isn't allowed or the image can't be fetched.
+    "/api/avatar": async (req) => {
+      const u = new URL(req.url).searchParams.get("u");
+      if (!u) return new Response("missing u", { status: 400 });
+      const img = await serveAvatar(config, u);
+      if (!img) return new Response("not found", { status: 404 });
+      return new Response(img.body, {
+        headers: { "content-type": img.type, "cache-control": "max-age=2592000" },
       });
     },
 
@@ -170,6 +233,14 @@ const server = Bun.serve({
             baseUrl: body.ai?.baseUrl ?? config.ai.baseUrl,
             apiKey: body.ai?.apiKey !== undefined ? body.ai.apiKey : config.ai.apiKey,
             model: body.ai?.model ?? config.ai.model,
+            // Coalesce empty → keep stored value (matches loadConfig's `||`), so
+            // an accidentally-blank targetLang never persists and then flips to
+            // the 中文 default on the next restart.
+            targetLang: body.ai?.targetLang || config.ai.targetLang,
+            // Blank template → keep stored value (Settings sends the default text
+            // on reset, never an empty string, so a real edit is never lost).
+            promptTemplate: body.ai?.promptTemplate || config.ai.promptTemplate,
+            stream: body.ai?.stream ?? config.ai.stream,
           },
         };
         config = next;
@@ -385,6 +456,15 @@ const server = Bun.serve({
         try {
           const { text } = await req.json();
           if (!config.ai.apiKey) return json({ error: "AI key not configured" }, { status: 400 });
+          const wantStream = config.ai.stream;
+          // Abort only the *headers* phase: once the provider starts streaming,
+          // the body is governed by translate-stream's per-read idle timeout. A
+          // single global AbortController would wrongly kill a healthy long
+          // translation, but a header-only timeout lets "provider never
+          // responds at all" surface as a 502 instead of hanging forever
+          // ("long text → silent no output").
+          const ac = new AbortController();
+          const headerTimer = setTimeout(() => ac.abort(), 60_000);
           const r = await fetch(`${config.ai.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
             method: "POST",
             headers: {
@@ -393,16 +473,18 @@ const server = Bun.serve({
             },
             body: JSON.stringify({
               model: config.ai.model,
-              messages: [
-                { role: "system", content: "你是一个翻译助手。把用户输入的英文（编程竞赛题面片段）翻译成中文。只输出译文，不要解释，不要加引号。保留原文中的 LaTeX 公式（$...$ 或 $$$...$$$）和代码（`...`）原样不动。保留段落分隔（空行）。可以使用 Markdown 的粗体（**text**）、斜体（*text*）。" },
-                { role: "user", content: text },
-              ],
+              messages: buildTranslateMessages(config.ai.targetLang, text, config.ai.promptTemplate),
               temperature: 0.2,
+              stream: wantStream,
             }),
-          });
+            signal: ac.signal,
+          }).finally(() => clearTimeout(headerTimer));
           if (!r.ok) {
             const t = await r.text();
             return json({ error: `Upstream ${r.status}: ${t.slice(0, 200)}` }, { status: 502 });
+          }
+          if (wantStream && r.body) {
+            return buildTranslateStreamResponse(r, renderTranslationHtml);
           }
           const j = await r.json();
           const out = j?.choices?.[0]?.message?.content ?? "";

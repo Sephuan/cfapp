@@ -10,7 +10,7 @@ import { useFetchJSON } from "../hooks";
 
 // Stats data is large (up to 10k submissions) and rarely changes, so it gets a
 // localStorage-backed 24h cache via the unified useFetchJSON hook.
-const STATS_CACHE = { keyPrefix: "cfapp_stats_", ttlMs: 24 * 60 * 60 * 1000 };
+const STATS_CACHE = { keyPrefix: "cfapp_stats_" };
 
 function tierColor(rating: number | null | undefined): string {
   return TIER_COLOR[ratingTier(rating) as keyof typeof TIER_COLOR] ?? "#9ca3af";
@@ -18,6 +18,28 @@ function tierColor(rating: number | null | undefined): string {
 
 function formatDate(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// ----- avatar -----
+// Route the CF avatar through the local /api/avatar proxy: it fetches via the
+// app's (proxy-aware) network path and caches the bytes to disk, so the avatar
+// loads without a VPN and survives restarts. If even the proxy can't produce an
+// image (disallowed host / offline first-ever load), fall back to initials.
+function Avatar({ url, initials, color }: { url: string | null | undefined; initials: string; color: string }) {
+  const [failed, setFailed] = useState(false);
+  // Clear the failed flag whenever the URL changes: a transient error (e.g. the
+  // very first load with the network down) must not pin us to initials for the
+  // rest of the session once a working avatar URL / connectivity arrives.
+  useEffect(() => { setFailed(false); }, [url]);
+  if (!url || failed) return <span style={{ color }}>{initials}</span>;
+  return (
+    <img
+      src={`/api/avatar?u=${encodeURIComponent(url)}`}
+      alt=""
+      className="stats-avatar-img"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 // ----- hero header -----
@@ -45,9 +67,7 @@ function StatsHero({ userInfo, ratingHistory, submissions }: {
       <div className="stats-hero-glow" style={{ background: `radial-gradient(circle at 25% 30%, ${color}26, transparent 70%)` }} />
       <div className="stats-hero-inner">
         <div className="stats-avatar" style={{ borderColor: color, boxShadow: `0 0 0 3px ${color}33` }}>
-          {userInfo.avatar
-            ? <img src={userInfo.avatar} alt="" className="stats-avatar-img" />
-            : <span style={{ color }}>{initials}</span>}
+          <Avatar url={userInfo.avatar} initials={initials} color={color} />
         </div>
         <div className="stats-hero-main">
           <div className="stats-hero-handle-row">
@@ -718,7 +738,7 @@ function Panel({ title, subtitle, children, className }: {
 export function StatsPage({ refreshTick }: { refreshTick: number }) {
   const { data: submissions, err: errS, loading: loadS } = useFetchJSON<UserSubmission[]>("/api/user/status", refreshTick, STATS_CACHE);
   const { data: ratingHistory, err: errR, loading: loadR } = useFetchJSON<RatingChange[]>("/api/user/rating-history", refreshTick, STATS_CACHE);
-  const { data: userInfo } = useFetchJSON<UserMe>("/api/user/me", refreshTick);
+  const { data: userInfo } = useFetchJSON<UserMe>("/api/user/me", refreshTick, STATS_CACHE);
 
   // Only show loading screen when we have NO data at all.
   // If we have cached data, show it immediately (loading is just background refresh).

@@ -1,11 +1,17 @@
 import type React from "react";
 import type { Contest, Problem } from "../../api";
-import { useFetchJSON } from "../hooks";
+import { useFetchJSON, type LocalStorageCache } from "../hooks";
+
+// Persist per-contest problem lists + my-status so a revisited contest shows
+// instantly and survives restarts/offline (URL-keyed, so each contest is its
+// own entry). Refreshes in the background.
+const PROBLEMS_CACHE: LocalStorageCache = { keyPrefix: "cfapp_problems_" };
+const MYSTATUS_CACHE: LocalStorageCache = { keyPrefix: "cfapp_mystatus_" };
 
 export function ProblemsPage({ contest, onPick, refreshTick }: { contest: Contest; onPick: (p: Problem) => void; refreshTick: number }) {
-  const { data, err, loading } = useFetchJSON<Problem[]>(`/api/contests/${contest.id}/problems`, refreshTick);
+  const { data, err, loading } = useFetchJSON<Problem[]>(`/api/contests/${contest.id}/problems`, refreshTick, PROBLEMS_CACHE);
   // Per-handle solve status. Failure here is non-fatal — we just don't draw markers.
-  const { data: mine } = useFetchJSON<{ byIndex: Record<string, "AC" | "WA"> }>(`/api/contests/${contest.id}/my-status`, refreshTick);
+  const { data: mine } = useFetchJSON<{ byIndex: Record<string, "AC" | "WA"> }>(`/api/contests/${contest.id}/my-status`, refreshTick, MYSTATUS_CACHE);
   const byIndex = mine?.byIndex ?? {};
   return (
     <div className="container">

@@ -206,6 +206,9 @@ mark.cf-hl-purple { background: var(--hl-purple); color: inherit; padding: 0; bo
 }
 .cf-tr-body p { margin: 0 0 0.6rem; line-height: 1.82; }
 .cf-tr-body p:last-child { margin-bottom: 0; }
+.cf-tr-body ul, .tr-popover .tr-body ul { margin: 0 0 0.6rem; padding-left: 1.4rem; list-style: disc; }
+.cf-tr-body ul:last-child, .tr-popover .tr-body ul:last-child { margin-bottom: 0; }
+.cf-tr-body li, .tr-popover .tr-body li { line-height: 1.82; }
 .cf-tr-body code {
   background: color-mix(in srgb, var(--tr-line) 20%, transparent);
   padding: 0.05em 0.3em; border-radius: 3px; font-size: 0.92em;

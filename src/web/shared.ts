@@ -28,7 +28,7 @@ export type AppConfig = {
   password: string;
   proxy: string;
   verifySsl: boolean;
-  ai: { baseUrl: string; apiKey: string; model: string };
+  ai: { baseUrl: string; apiKey: string; model: string; targetLang: string; promptTemplate: string; stream: boolean };
 };
 
 export const TIER_COLOR: Record<UserMe["tier"], string> = {

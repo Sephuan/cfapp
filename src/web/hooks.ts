@@ -7,20 +7,27 @@ import type { Route } from "./shared";
 // server itself also caches and serves stale-while-revalidate
 // (updateCacheIfNeeded), so the second leg is usually a no-op cache hit.
 //
-// Callers that want a *persistent* cache (surviving reload, with TTL) pass a
-// `localStorageCache` descriptor — the entry is then mirrored to localStorage
-// under `<keyPrefix><url-without-query>` and used as the initial state.
+// Callers that want a *persistent* cache (surviving reload/restart) pass a
+// `localStorageCache` descriptor — the entry is mirrored to localStorage under
+// `<keyPrefix><url-without-query>`. We paint that saved value IMMEDIATELY
+// regardless of age (show-then-refresh), then always re-fetch in the background
+// and swap in fresh data if it arrives. This is what makes the homepage /
+// contest / stats views feel instant on every launch and keeps showing
+// last-known data when the network (VPN) is down. There is deliberately no TTL:
+// the refresh always runs, so freshness is never sacrificed, and stale data is
+// always preferable to a spinner or a blank page.
 const __fetchCache = new Map<string, unknown>();
 
-export type LocalStorageCache = { keyPrefix: string; ttlMs: number };
+export type LocalStorageCache = { keyPrefix: string };
 
-function readLsCache<T>(c: LocalStorageCache, cacheKey: string): T | null {
+// Read the persisted value ignoring age — used to seed the first paint so the
+// user never stares at a spinner when we have *something* to show.
+function peekLsCache<T>(c: LocalStorageCache, cacheKey: string): T | null {
   try {
     const raw = localStorage.getItem(c.keyPrefix + cacheKey);
     if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    if (Date.now() - ts > c.ttlMs) return null;
-    return data as T;
+    const { data } = JSON.parse(raw);
+    return (data ?? null) as T | null;
   } catch {
     return null;
   }
@@ -43,7 +50,7 @@ export function useFetchJSON<T>(
   // a refresh (`?refresh=1`) doesn't fragment the cache.
   const cacheKey = url ? url.split("?")[0]! : "";
   const cached = url
-    ? (localStorageCache ? readLsCache<T>(localStorageCache, cacheKey) : null)
+    ? (localStorageCache ? peekLsCache<T>(localStorageCache, cacheKey) : null)
       ?? (__fetchCache.get(url) as T | undefined ?? null)
     : null;
   const [data, setData] = useState<T | null>(cached);
@@ -55,11 +62,23 @@ export function useFetchJSON<T>(
     if (!url) return;
     let cancelled = false;
     const hadMem = __fetchCache.has(url);
-    const hadLs = localStorageCache ? readLsCache<T>(localStorageCache, cacheKey) !== null : false;
+    const lsSeed = localStorageCache ? peekLsCache<T>(localStorageCache, cacheKey) : null;
+    const hadLs = lsSeed !== null;
+    // Re-seed `data` for the CURRENT url. This instance may be reused across a
+    // url change (e.g. problem A → problem B); without this, `data` would keep
+    // showing the previous entity until the network fetch resolves — wrong
+    // content, or forever if offline. Prefer the in-memory value; fall back to
+    // the persisted one so an LS-only entry is painted too.
     if (hadMem) setData(__fetchCache.get(url) as T);
-    if (!hadMem && !hadLs) setLoading(true);
+    else if (hadLs) setData(lsSeed);
+    else { setData(null); setLoading(true); }
     setErr(null);
-    const u = refreshTick > 0
+    // A user-initiated refresh (topbar ↻ bumps refreshTick) means "get me new
+    // data"; if that fails we must say so even when a cache is on screen, or the
+    // failure is invisible. A passive/background refresh keeps silent and just
+    // leaves the cached data up.
+    const forced = refreshTick > 0;
+    const u = forced
       ? url + (url.includes("?") ? "&" : "?") + "refresh=1"
       : url;
     fetch(u)
@@ -70,7 +89,10 @@ export function useFetchJSON<T>(
         if (localStorageCache) writeLsCache(localStorageCache, cacheKey, j);
         setData(j);
       })
-      .catch((e) => { if (!cancelled) setErr(e.message); })
+      // Keep showing cached data on a failed refresh (e.g. VPN dropped). Surface
+      // an error when we have nothing to show, OR when the user explicitly asked
+      // for a refresh (so a forced refresh that fails isn't silently swallowed).
+      .catch((e) => { if (!cancelled && (forced || (!hadMem && !hadLs))) setErr(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [url, refreshTick, cacheKey, localStorageCache]);

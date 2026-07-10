@@ -68,10 +68,16 @@ export function rangeToOffsets(container: HTMLElement, range: Range, stopAt?: HT
 // formula. With it, the AI gets `consider $a_i$` and the response can be
 // re-rendered by renderTranslationHtml on the server.
 export function rangeToTexSource(container: HTMLElement, range: Range): string {
-  // Walk both text nodes AND .cf-math element nodes; for math nodes emit the
-  // source and skip their subtree.
+  // Walk both text nodes AND element nodes; for math nodes emit the source and
+  // skip their subtree; for block-level nodes emit a line/paragraph break so the
+  // AI (and the re-render) preserve list items and paragraphs — otherwise a
+  // selected vertical list collapses to "[12][18][12,18]…" on one line.
   const out: string[] = [];
   const seenMath = new Set<HTMLElement>();
+  // Line-break blocks (each starts a new visual line) vs paragraph blocks (blank
+  // line between). renderTranslationHtml maps a single "\n" → <br>, "\n\n" → <p>.
+  const LINE_TAGS = new Set(["LI", "BR", "TR"]);
+  const PARA_TAGS = new Set(["P", "DIV", "SECTION", "BLOCKQUOTE", "UL", "OL", "H1", "H2", "H3", "H4", "H5", "H6"]);
   const walker = document.createTreeWalker(
     container,
     NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
@@ -81,6 +87,9 @@ export function rangeToTexSource(container: HTMLElement, range: Range): string {
           const el = node as HTMLElement;
           if (el.classList?.contains("cf-math")) return NodeFilter.FILTER_ACCEPT;
           if (el.classList?.contains("katex-mathml")) return NodeFilter.FILTER_REJECT;
+          // Accept block-level elements so we can emit a break, but still descend
+          // into their children (FILTER_ACCEPT keeps walking the subtree).
+          if (LINE_TAGS.has(el.tagName) || PARA_TAGS.has(el.tagName)) return NodeFilter.FILTER_ACCEPT;
           return NodeFilter.FILTER_SKIP;
         }
         // text nodes: reject if inside katex-mathml or inside a cf-math we
@@ -112,6 +121,13 @@ export function rangeToTexSource(container: HTMLElement, range: Range): string {
           out.push(display ? `$$$${tex}$$$` : `$${tex}$`);
           seenMath.add(el);
         }
+      } else if (range.intersectsNode(el)) {
+        // Block boundary. List items get a "- " bullet marker so the marker and
+        // indentation survive the round-trip (renderTranslationHtml turns a run
+        // of "- " lines back into a <ul>); other line blocks (br/tr) get a bare
+        // newline, paragraph-level blocks a blank line.
+        if (el.tagName === "LI") out.push("\n- ");
+        else out.push(PARA_TAGS.has(el.tagName) ? "\n\n" : "\n");
       }
     } else {
       const t = n as Text;
@@ -126,9 +142,13 @@ export function rangeToTexSource(container: HTMLElement, range: Range): string {
     }
     n = walker.nextNode();
   }
-  // Tidy: collapse 3+ whitespace runs (KaTeX leaves nothing here, but CF's
-  // markup occasionally does), preserve single spaces and newlines.
-  return out.join("").replace(/[ \t]+/g, " ").trim();
+  // Tidy: collapse horizontal whitespace runs, cap blank-line runs at one, and
+  // trim leading/trailing breaks introduced by enclosing blocks.
+  return out.join("")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 // Apply [{start,end,color}] to the (already restored) base DOM by walking its
@@ -227,7 +247,11 @@ export function lsKey(contestId: number, idx: string, kind: "hl" | "tr" | "theme
 // block-level element that contains that offset. Storing the source text
 // and rendered HTML means we can replay without re-hitting the API.
 export type TrHLRange = { start: number; end: number; color: HLColor };
-export type TrEntry = { start: number; end: number; src: string; html: string; hlRanges?: TrHLRange[] };
+// `id` uniquely identifies an in-flight translation so its partial HTML can be
+// updated across re-renders; `pending` marks it as still translating (shows the
+// busy style + hides the close button). Both optional for backward compat with
+// persisted entries that predate this field.
+export type TrEntry = { start: number; end: number; src: string; html: string; id?: string; pending?: boolean; hlRanges?: TrHLRange[] };
 
 // Construct the DOM element for an inline translation block. The close
 // button (×) calls onRemove which evicts it from state + localStorage.
@@ -235,12 +259,18 @@ export type TrEntry = { start: number; end: number; src: string; html: string; h
 // letting it read as another paragraph of the statement.
 export function buildTrBlock(entry: TrEntry, onRemove: () => void): HTMLDivElement {
   const block = document.createElement("div");
-  block.className = "cf-tr";
-  const close = document.createElement("button");
-  close.className = "cf-tr-close";
-  close.type = "button";
-  close.textContent = "×";
-  close.addEventListener("click", (e) => { e.stopPropagation(); onRemove(); });
+  // `pending` = translation in flight. The cf-tr-loading class italicizes it
+  // and we omit the close button (there's nothing to dismiss yet — removing a
+  // pending block mid-stream would orphan the still-running request).
+  block.className = entry.pending ? "cf-tr cf-tr-loading" : "cf-tr";
+  if (!entry.pending) {
+    const close = document.createElement("button");
+    close.className = "cf-tr-close";
+    close.type = "button";
+    close.textContent = "×";
+    close.addEventListener("click", (e) => { e.stopPropagation(); onRemove(); });
+    block.appendChild(close);
+  }
   const body = document.createElement("div");
   body.className = "cf-tr-body";
   const seal = document.createElement("span");
@@ -251,7 +281,6 @@ export function buildTrBlock(entry: TrEntry, onRemove: () => void): HTMLDivEleme
   bodyContent.className = "cf-tr-content";
   bodyContent.innerHTML = entry.html;
   body.appendChild(bodyContent);
-  block.appendChild(close);
   block.appendChild(body);
   // Apply stored highlights to the translation body text.
   if (entry.hlRanges && entry.hlRanges.length > 0) {

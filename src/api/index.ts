@@ -13,6 +13,7 @@
 export * from "./types";
 export * from "./net";
 export * from "./cache";
+export { serveAvatar, type AvatarBytes } from "./avatar-cache";
 export { CookieJar, jarFetch, jarFetchViaCurl, withNetworkOptions } from "./cookie";
 export type { BunFetchInit } from "./cookie";
 export {

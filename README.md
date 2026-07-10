@@ -42,12 +42,17 @@ The first time, click **Login** in the top bar — a CF webview opens, you log i
   "ai": {                           // OpenAI-compatible endpoint for translation
     "baseUrl": "",
     "apiKey": "",
-    "model": ""
+    "model": "",
+    "targetLang": "中文",             // language AI translation renders into (preset or custom)
+    "promptTemplate": "",            // system prompt; {lang}/{source_text} are substituted (blank = built-in)
+    "stream": true                   // stream the translation token-by-token as it's generated
   }
 }
 ```
 
 Sensitive fields are stored in plaintext; the file is written with mode `0600`. Don't fill `password` unless you need the web-form submit fallback (the webview's logged-in session is preferred).
+
+The **app interface language** (English / 中文 / Bilingual) is a separate, client-only setting stored in `localStorage` (`cfapp:lang`) — it flips instantly and doesn't touch `config.json`. `ai.targetLang` above is the distinct, server-consumed language that AI translation *outputs*; both are edited under Settings → Language.
 
 ## How the Cloudflare bypass works
 
@@ -68,6 +73,10 @@ src/
   server.ts          Bun HTTP server: REST API, font proxy, translation rendering
   api.ts             re-export shim (backward compat)
   api/               CF API modules (types, net, cache, cookie, html, cf-api, auth, tiers)
+  api/avatar-cache.ts avatar proxy: fetches CF avatars through the app's proxy-aware path,
+                      sniffs+validates the image bytes, caches them to disk (works offline)
+  api/translate-prompt.ts language-parameterized, injection-resistant system prompt for AI translation
+  api/translate-stream.ts SSE plumbing for streaming translation (throttled incremental KaTeX render, stall salvage)
   config.ts          ~/.config/cfapp/config.json load/save
   ac-store.ts        per-handle contest AC verdict persistence (survives CF rate-limiting; bulk-synced from user.status)
   fonts.ts           multi-mirror font cache under ~/.cache/cfapp/fonts/
@@ -77,7 +86,8 @@ src/
     styles/          per-page CSS (base, problem, stats, settings, themes)
     shared.ts        shared types (Route, UserMe, AppConfig, etc.)
     chrome.tsx       Topbar + BottomBar + PersistentCfFrame
-    hooks.ts         useFetchJSON, useHistoryStack
+    hooks.ts         useFetchJSON (show-cached-then-refresh, offline-tolerant), useHistoryStack
+    i18n.ts          app UI language store (en / zh / mix) + string dictionary
     index.html
   index.tsx          legacy terminal UI (OpenTUI)
   screens/           legacy terminal UI screens
@@ -100,7 +110,9 @@ bun run test         # bun test
 ## Features
 
 - **Contest & Problem browser** — paginated contest list with per-contest "x/y solved" badges synced from your full submission history in one pull; problem statements with server-rendered LaTeX (KaTeX)
-- **Inline AI translation** — OpenAI-compatible endpoint translates problem text with persistent annotations
+- **Inline AI translation** — OpenAI-compatible endpoint translates problem text with persistent annotations; streams the result token-by-token as it's generated, with LaTeX and inline code preserved. The target language is configurable (中文 / English / 日本語 / 한국어 / … or a custom language) and the system prompt is fully editable — the built-in one is injection-resistant, so problem imperatives like "determine" or "output YES" get translated as text instead of obeyed. All saved automatically.
+- **Bilingual UI** — the whole interface switches between English, 中文, and a mixed bilingual mode, instantly and per-client
+- **Offline-tolerant & instant** — contest lists, problem statements, stats, and avatars are persisted locally and painted immediately on launch (show-cached-then-refresh-in-background), so the app stays usable and fast even when the network / VPN drops; avatars are proxied through the app's own network path and byte-cached to disk instead of being fetched directly by the browser
 - **Code editor** — syntax-highlighted, autosave, direct submission via CF API or web-form fallback
 - **Stats dashboard** — interactive rating history (tier bands, hover tooltips, drag-to-zoom + time-range presets), submission heatmap, verdict/language distribution, all rendered with pure CSS + inline SVG (zero chart deps). Solve data is scoped per handle, so switching accounts never leaks the wrong stats.
 - **Fonts & themes** — per-role serif fonts (body / statement / display) served from a local `@fontsource` cache, plus swappable color themes (leather-book, cool-gray, forest, rosegold, violet, obsidian) and translation-annotation palettes, all applied via `data-*` attribute flips with no re-render

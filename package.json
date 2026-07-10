@@ -1,6 +1,6 @@
 {
   "name": "cfapp-ts",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Codeforces client with web UI, AI translation, and Cloudflare bypass",
   "author": "Sephuan <sephuan@users.noreply.github.com>",
   "homepage": "https://github.com/Sephuan/cfapp",

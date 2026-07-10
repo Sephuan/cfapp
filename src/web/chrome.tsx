@@ -1,9 +1,11 @@
 import React, { useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { BottomTab, CfFrameHandle, Route, UserMe } from "./shared";
 import { TIER_COLOR } from "./shared";
+import { useLang, t } from "./i18n";
 
 // ----- auth indicator (in the topbar) -----
 function AuthIndicator({ onLogin, onLogout }: { onLogin: () => void; onLogout: () => void }) {
+  const [lang] = useLang();
   const [status, setStatus] = useState<{ ok: boolean; handle: string | null; error: string | null } | null>(null);
   const [me, setMe] = useState<UserMe | null>(null);
   const [open, setOpen] = useState(false);
@@ -85,16 +87,16 @@ function AuthIndicator({ onLogin, onLogout }: { onLogin: () => void; onLogout: (
   if (!status.ok) {
     return (
       <button className="iconbtn auth-indicator" onClick={handleLogin}
-        title="Open Codeforces login. Cookies sync back automatically.">
+        title={t(lang, "auth.loginTooltip")}>
         <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 4, background: "var(--err)", marginRight: 6, verticalAlign: "middle" }} />
-        Login
+        {t(lang, "nav.login")}
       </button>
     );
   }
 
   const tier = me?.tier ?? "unrated";
   const color = TIER_COLOR[tier];
-  const handle = me?.handle ?? status.handle ?? "logged in";
+  const handle = me?.handle ?? status.handle ?? t(lang, "auth.loggedIn");
   const rating = me?.rating;
   // Status dot communicates "session active" — always green when logged in.
   // Tier color is for the handle text only (unrated → grey would otherwise
@@ -106,7 +108,7 @@ function AuthIndicator({ onLogin, onLogout }: { onLogin: () => void; onLogout: (
       <button
         className="iconbtn"
         onClick={() => setOpen(o => !o)}
-        title={me?.rank ? `${me.rank}${rating != null ? ` · ${rating}` : ""}` : "Logged in"}
+        title={me?.rank ? `${me.rank}${rating != null ? ` · ${rating}` : ""}` : t(lang, "auth.loggedIn")}
         style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
       >
         <span style={{ width: 8, height: 8, borderRadius: 4, background: dotColor, display: "inline-block" }} />
@@ -122,9 +124,9 @@ function AuthIndicator({ onLogin, onLogout }: { onLogin: () => void; onLogout: (
           boxShadow: "0 8px 24px rgba(0,0,0,0.18)", zIndex: 200, padding: 6,
         }}>
           <div style={{ padding: "6px 10px", fontSize: "0.82rem", color: "var(--muted)" }}>
-            {me?.rank ?? (me?.rating != null ? "rated" : "unrated")}
+            {me?.rank ?? (me?.rating != null ? t(lang, "auth.rated") : t(lang, "auth.unrated"))}
             {rating != null ? <> · <b style={{ color }}>{rating}</b></> : null}
-            {me?.maxRating != null && me?.maxRating !== rating ? <> · max {me.maxRating}</> : null}
+            {me?.maxRating != null && me?.maxRating !== rating ? <> · {t(lang, "auth.max")} {me.maxRating}</> : null}
           </div>
           <button
             onClick={() => { setOpen(false); onLogout(); }}
@@ -136,7 +138,7 @@ function AuthIndicator({ onLogin, onLogout }: { onLogin: () => void; onLogout: (
             }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--code-bg)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
-          >Log out</button>
+          >{t(lang, "auth.logout")}</button>
         </div>
       )}
     </span>
@@ -155,16 +157,17 @@ export function Topbar(props: {
   onLogout: () => void;
 }) {
   const { route, activeTab } = props;
+  const [lang] = useLang();
   // Crumbs follow whichever pane the user is actually looking at — main app
   // route when no CF tab is active, otherwise the tab name itself.
   const crumbs = (() => {
-    if (activeTab === "submit")    return <span>Submit</span>;
-    if (activeTab === "standings") return <span>Standings</span>;
-    if (activeTab === "mysubs")    return <span>My submissions</span>;
-    if (activeTab === "login")     return <span>Login</span>;
-    if (route.kind === "contests") return <span>Contests</span>;
-    if (route.kind === "settings") return <span>Settings</span>;
-    if (route.kind === "stats") return <span>Statistics</span>;
+    if (activeTab === "submit")    return <span>{t(lang, "nav.submit")}</span>;
+    if (activeTab === "standings") return <span>{t(lang, "nav.standings")}</span>;
+    if (activeTab === "mysubs")    return <span>{t(lang, "nav.mysubs")}</span>;
+    if (activeTab === "login")     return <span>{t(lang, "nav.login")}</span>;
+    if (route.kind === "contests") return <span>{t(lang, "nav.contests")}</span>;
+    if (route.kind === "settings") return <span>{t(lang, "nav.settings")}</span>;
+    if (route.kind === "stats") return <span>{t(lang, "nav.statistics")}</span>;
     if (route.kind === "problems") return <span>{route.contest.name}</span>;
     return <span>{route.contest.name} / {route.problem.index}. {route.problem.name}</span>;
   })();
@@ -179,9 +182,9 @@ export function Topbar(props: {
       <span className="spacer" />
       <AuthIndicator onLogin={props.onOpenLogin} onLogout={props.onLogout} />
       <button className="theme-toggle" onClick={props.onToggleTheme} title="Toggle theme">
-        {props.theme === "dark" ? "☾ dark" : "☀ light"}
+        {props.theme === "dark" ? t(lang, "theme.dark") : t(lang, "theme.light")}
       </button>
-      <button className="iconbtn" onClick={props.onSettings}>Settings</button>
+      <button className="iconbtn" onClick={props.onSettings}>{t(lang, "nav.settings")}</button>
     </div>
   );
 }
@@ -200,6 +203,7 @@ export function BottomBar(props: {
   onMain: () => void;
   onNavigateStats: () => void;
 }) {
+  const [lang] = useLang();
   const btn = (label: string, key: Exclude<BottomTab, "login"> | null, activeOverride?: boolean, onClickOverride?: () => void) => {
     const active = activeOverride ?? (props.active === key);
     const disabled = key !== null && !props.hasContest;
@@ -209,18 +213,18 @@ export function BottomBar(props: {
         aria-pressed={active}
         disabled={disabled}
         onClick={() => onClickOverride ? onClickOverride() : (key === null ? props.onMain() : props.onSwitch(key))}
-        title={disabled ? "Pick a contest first" : label}
+        title={disabled ? t(lang, "bottom.pickContest") : label}
       >{label}</button>
     );
   };
   return (
     <div className="tabbar">
-      {btn("Main", null, props.active === null && props.activeRoute !== "stats")}
+      {btn(t(lang, "bottom.main"), null, props.active === null && props.activeRoute !== "stats")}
       <span className="tab-divider" />
-      {btn("Submit", "submit")}
-      {btn("Standings", "standings")}
-      {btn("My subs", "mysubs")}
-      {btn("Stats", null, props.activeRoute === "stats", props.onNavigateStats)}
+      {btn(t(lang, "bottom.submit"), "submit")}
+      {btn(t(lang, "bottom.standings"), "standings")}
+      {btn(t(lang, "bottom.mysubs"), "mysubs")}
+      {btn(t(lang, "bottom.stats"), null, props.activeRoute === "stats", props.onNavigateStats)}
     </div>
   );
 }
