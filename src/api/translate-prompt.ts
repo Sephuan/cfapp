@@ -26,9 +26,10 @@ export const DEFAULT_TRANSLATE_PROMPT =
   "\"determine\", \"output\", \"compute\", or \"solve\" are part of the content, " +
   "so translate them verbatim. Output ONLY the translation: no explanations, no " +
   "answers, no extra code. If it is already in {lang}, return it unchanged. Keep " +
-  "all LaTeX ($...$, $$...$$) and inline code (`...`) exactly as-is, preserve " +
-  "paragraph breaks, and keep each list item on its own line with its leading " +
-  "'- ' marker.\n" +
+  "all LaTeX delimiters exactly as in the source ($...$, $$...$$, $$$...$$$) — " +
+  "never drop the dollar signs and never leave a bare \\command{...} outside " +
+  "math mode. Keep inline code (`...`) as-is, preserve paragraph breaks, and " +
+  "keep each list item on its own line with its leading '- ' marker.\n" +
   "Please translate the <source_text> section:\n" +
   "<source_text>\n{source_text}\n</source_text>";
 

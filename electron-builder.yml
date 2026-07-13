@@ -15,9 +15,15 @@ files:
   - node_modules/scheduler/**/*
   - package.json
 
+# Ship a Bun runtime next to the app. The binary under .bun-packaged MUST be
+# built for the *target* OS/arch (linux-x64, darwin-arm64, win-x64, …). Cross-
+# packaging from one machine requires downloading that platform's bun first:
+#   https://github.com/oven-sh/bun/releases
 extraResources:
   - from: .bun-packaged
     to: bun
+    filter:
+      - "**/*"
 
 linux:
   icon: build/icon.png
@@ -26,6 +32,27 @@ linux:
     - rpm
     - deb
     - AppImage
+  executableName: cfapp
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # Electron + local Bun server; unsigned local builds are fine for personal use.
+  identity: null
+
+win:
+  icon: build/icon.png
+  target:
+    - nsis
+    - portable
+  executableName: cfapp
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
 
 rpm:
   depends:

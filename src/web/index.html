@@ -23,7 +23,8 @@
       (function () {
         try {
           var t = localStorage.getItem("cfapp:tr-theme");
-          if (t === "ink" || t === "indigo") {
+          // Keep in sync with TR_THEMES in themes.ts (amber = default, no attr).
+          if (t === "ink" || t === "indigo" || t === "cinnabar" || t === "plum") {
             document.documentElement.setAttribute("data-tr-theme", t);
           }
           // Restore each font role's saved pick before first paint so text
@@ -31,14 +32,24 @@
           // FONT_ROLES in themes.ts (id "" = default, no attribute).
           // roleKey -> array of valid non-default choice ids.
           var FONT_ROLES = {
-            body:      ["source-serif", "eb-garamond", "lora", "spectral", "bitter", "georgia"],
-            statement: ["eb-garamond", "source-serif", "lora", "spectral", "libre-baskerville"],
-            display:   ["cormorant"],
+            body:      ["source-serif", "eb-garamond", "lora", "spectral", "bitter", "georgia", "custom"],
+            statement: ["eb-garamond", "source-serif", "lora", "spectral", "libre-baskerville", "custom"],
+            display:   ["cormorant", "custom"],
           };
           Object.keys(FONT_ROLES).forEach(function (key) {
             var v = localStorage.getItem("cfapp:font-" + key);
             if (v && FONT_ROLES[key].indexOf(v) !== -1) {
               document.documentElement.setAttribute("data-font-" + key, v);
+              // Custom pick: restore --font-<role>-custom before paint.
+              if (v === "custom") {
+                var fam = localStorage.getItem("cfapp:font-" + key + "-family");
+                if (fam) {
+                  document.documentElement.style.setProperty(
+                    "--font-" + key + "-custom",
+                    '"' + fam.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"'
+                  );
+                }
+              }
             }
           });
           // Legacy key migration: the old single-font picker stored

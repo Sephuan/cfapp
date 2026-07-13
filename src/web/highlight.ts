@@ -251,18 +251,53 @@ export type TrHLRange = { start: number; end: number; color: HLColor };
 // updated across re-renders; `pending` marks it as still translating (shows the
 // busy style + hides the close button). Both optional for backward compat with
 // persisted entries that predate this field.
-export type TrEntry = { start: number; end: number; src: string; html: string; id?: string; pending?: boolean; hlRanges?: TrHLRange[] };
+// `auto` tags a block produced by auto-translate (vs. a manual selection) so it
+// can be cleared in bulk; `error` (auto-translate only) marks a failed segment
+// that renders the error branch of buildTrBlock with a retry button. Errors are
+// never persisted (persistTrEntries drops pending/error entries), so a failed
+// block always re-translates on reload.
+export type TrEntry = {
+  start: number; end: number; src: string; html: string;
+  id?: string; pending?: boolean; auto?: boolean; error?: string;
+  hlRanges?: TrHLRange[];
+};
 
 // Construct the DOM element for an inline translation block. The close
 // button (×) calls onRemove which evicts it from state + localStorage.
 // A leading 「译」 seal announces the block as a translation rather than
 // letting it read as another paragraph of the statement.
-export function buildTrBlock(entry: TrEntry, onRemove: () => void): HTMLDivElement {
+//
+// `onRetry` is optional and only used for the error branch (a failed
+// translation). When `entry.error` is set the block renders as an error
+// (cf-tr-error) with the message plus a "retry" button calling onRetry;
+// the × dismiss still works via onRemove. This keeps errors on the SAME
+// render path as successes — there is no separate auto-translate renderer.
+//
+// `opts.retryLabel` localizes the error-block retry button (defaults to "Retry").
+// `opts.collapsed` starts a finished block collapsed (full-mode autoCollapse).
+export function buildTrBlock(
+  entry: TrEntry,
+  onRemove: () => void,
+  onRetry?: () => void,
+  opts?: { retryLabel?: string; collapsed?: boolean; expandLabel?: string; collapseLabel?: string },
+): HTMLDivElement {
   const block = document.createElement("div");
+  // Stable identity for highlight/clear: DOM is sorted by `end`, state array
+  // is not — never map querySelectorAll index → trEntries[i].
+  if (entry.id) block.dataset.trId = entry.id;
+  block.dataset.trStart = String(entry.start);
+  block.dataset.trEnd = String(entry.end);
   // `pending` = translation in flight. The cf-tr-loading class italicizes it
   // and we omit the close button (there's nothing to dismiss yet — removing a
-  // pending block mid-stream would orphan the still-running request).
-  block.className = entry.pending ? "cf-tr cf-tr-loading" : "cf-tr";
+  // pending block mid-stream would orphan the still-running request). An error
+  // block is NOT pending, so its × shows (the user can dismiss a dead block),
+  // and it gets cf-tr-error for the error tint.
+  if (entry.pending) block.className = "cf-tr cf-tr-loading";
+  else if (entry.error) block.className = "cf-tr cf-tr-error";
+  else block.className = "cf-tr";
+  if (opts?.collapsed && !entry.pending && !entry.error) {
+    block.classList.add("cf-tr-collapsed");
+  }
   if (!entry.pending) {
     const close = document.createElement("button");
     close.className = "cf-tr-close";
@@ -270,6 +305,20 @@ export function buildTrBlock(entry: TrEntry, onRemove: () => void): HTMLDivEleme
     close.textContent = "×";
     close.addEventListener("click", (e) => { e.stopPropagation(); onRemove(); });
     block.appendChild(close);
+  }
+  if (opts?.collapsed && !entry.pending && !entry.error) {
+    const toggle = document.createElement("button");
+    toggle.className = "cf-tr-toggle";
+    toggle.type = "button";
+    const expandLabel = opts.expandLabel ?? "Expand";
+    const collapseLabel = opts.collapseLabel ?? "Collapse";
+    toggle.textContent = expandLabel;
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nowCollapsed = block.classList.toggle("cf-tr-collapsed");
+      toggle.textContent = nowCollapsed ? expandLabel : collapseLabel;
+    });
+    block.appendChild(toggle);
   }
   const body = document.createElement("div");
   body.className = "cf-tr-body";
@@ -279,7 +328,20 @@ export function buildTrBlock(entry: TrEntry, onRemove: () => void): HTMLDivEleme
   body.appendChild(seal);
   const bodyContent = document.createElement("div");
   bodyContent.className = "cf-tr-content";
-  bodyContent.innerHTML = entry.html;
+  if (entry.error) {
+    // Error branch: show the message text (not as HTML) plus a retry button.
+    bodyContent.textContent = entry.error;
+    if (onRetry) {
+      const retry = document.createElement("button");
+      retry.className = "cf-tr-retry";
+      retry.type = "button";
+      retry.textContent = opts?.retryLabel ?? "Retry";
+      retry.addEventListener("click", (e) => { e.stopPropagation(); onRetry(); });
+      bodyContent.appendChild(retry);
+    }
+  } else {
+    bodyContent.innerHTML = entry.html;
+  }
   body.appendChild(bodyContent);
   block.appendChild(body);
   // Apply stored highlights to the translation body text.

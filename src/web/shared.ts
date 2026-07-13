@@ -28,7 +28,16 @@ export type AppConfig = {
   password: string;
   proxy: string;
   verifySsl: boolean;
-  ai: { baseUrl: string; apiKey: string; model: string; targetLang: string; promptTemplate: string; stream: boolean };
+  ai: {
+    baseUrl: string; apiKey: string; model: string; targetLang: string;
+    promptTemplate: string; stream: boolean;
+    autoMode: "off" | "full" | "section" | "paragraph";
+    autoTrigger: "manual" | "onopen";
+    rpm: number; // 滚动 60s 内最多启动次数,0=不限
+    concurrency: number;
+    autoCollapse: boolean;
+    requestIntervalMs: number; // 相邻请求 *启动* 的最小间隔(毫秒),与 rpm 独立
+  };
 };
 
 export const TIER_COLOR: Record<UserMe["tier"], string> = {

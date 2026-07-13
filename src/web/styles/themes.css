@@ -37,20 +37,19 @@
    * raw stack. Change a stack once → every selector updates. */
   --font-display: "Playfair Display", "Lora", Georgia, "Noto Serif CJK SC", serif;
   --font-body: "Newsreader", Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
-  /* Statement default is Georgia — a screen-legible system serif that needs no
-   * download. EB Garamond is offered as an opt-in via [data-font-statement]
-   * (it's shipped by fonts.ts, but Georgia is the intentional default look). */
+  /* Statement default is Georgia — fonts.ts ships Gelasio under that family
+   * name (open, metric-compatible; real MS Georgia cannot be redistributed).
+   * EB Garamond etc. remain switchable via [data-font-statement]. */
   --font-statement: Georgia, "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "Noto Serif CJK SC", "Songti SC", serif;
   --font-cjk: "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "EB Garamond", Georgia, "Noto Serif CJK SC", "Songti SC", serif;
   --font-cjk-label: "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", serif;
   --font-code: "JetBrains Mono", Menlo, Consolas, monospace;
 
   /* ----- translation annotation theme (light) -----
-   * Three palettes switchable from Settings via [data-tr-theme].
+   * Palettes switchable from Settings via [data-tr-theme].
    * Default (no attribute) falls back to amber so existing sessions stay
-   * identical. amber follows the leather-book warm tone; ink is the cool
-   * ink-counterpoint (calm, "margin note"); indigo is the high-contrast
-   * "classical annotation" look. */
+   * identical. amber = leather-book warm; ink = cool margin note; indigo =
+   * high-contrast classical; cinnabar = vermilion 朱笔; plum = wisteria. */
   --tr-text: #7c4a12;      /* amber body text */
   --tr-line: #b45309;      /* left border + label */
   --tr-bg: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -75,6 +74,24 @@
   --tr-label: #eef2ff;
   --tr-label-bg: #1e3a8a;
   --tr-close: #1e3a8a;
+}
+[data-tr-theme="cinnabar"][data-theme],
+:root[data-tr-theme="cinnabar"] {
+  --tr-text: #9f1239;      /* cinnabar / vermilion body */
+  --tr-line: #b91c1c;
+  --tr-bg: color-mix(in srgb, #b91c1c 10%, transparent);
+  --tr-label: #fff5f5;
+  --tr-label-bg: #b91c1c;
+  --tr-close: #b91c1c;
+}
+[data-tr-theme="plum"][data-theme],
+:root[data-tr-theme="plum"] {
+  --tr-text: #5b21b6;      /* wisteria / plum body */
+  --tr-line: #6d28d9;
+  --tr-bg: color-mix(in srgb, #6d28d9 10%, transparent);
+  --tr-label: #f5f3ff;
+  --tr-label-bg: #6d28d9;
+  --tr-close: #6d28d9;
 }
 
 /* ===== dark theme ===== */
@@ -131,6 +148,22 @@
   --tr-label: #15110d;
   --tr-label-bg: #93b4f0;
   --tr-close: #93b4f0;
+}
+[data-theme="dark"][data-tr-theme="cinnabar"] {
+  --tr-text: #e88b8b;      /* cinnabar on dark */
+  --tr-line: #e07a7a;
+  --tr-bg: color-mix(in srgb, #e07a7a 14%, transparent);
+  --tr-label: #1e1a14;
+  --tr-label-bg: #e07a7a;
+  --tr-close: #e07a7a;
+}
+[data-theme="dark"][data-tr-theme="plum"] {
+  --tr-text: #c4b5fd;      /* plum on dark */
+  --tr-line: #a78bfa;
+  --tr-bg: color-mix(in srgb, #a78bfa 14%, transparent);
+  --tr-label: #1a1028;
+  --tr-label-bg: #a78bfa;
+  --tr-close: #a78bfa;
 }
 
 /* ===== color themes (independent of light/dark) =====
@@ -314,6 +347,10 @@
 [data-font-body="bitter"] {
   --font-body: "Bitter", Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
 }
+/* Custom family injected as --font-body-custom (quoted name) by themes.ts. */
+[data-font-body="custom"] {
+  --font-body: var(--font-body-custom), Georgia, "LXGW WenKai", "Noto Serif CJK SC", "Songti SC", serif;
+}
 
 /* --- statement --- */
 [data-font-statement="eb-garamond"] {
@@ -331,10 +368,16 @@
 [data-font-statement="libre-baskerville"] {
   --font-statement: "Libre Baskerville", Georgia, "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "Noto Serif CJK SC", "Songti SC", serif;
 }
+[data-font-statement="custom"] {
+  --font-statement: var(--font-statement-custom), Georgia, "LXGW WenKai", "霞鹜文楷", "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "AR PL KaitiM GB", "Noto Serif CJK SC", "Songti SC", serif;
+}
 
 /* --- display --- */
 [data-font-display="cormorant"] {
   --font-display: "Cormorant Garamond", "Playfair Display", Georgia, "Noto Serif CJK SC", serif;
+}
+[data-font-display="custom"] {
+  --font-display: var(--font-display-custom), "Playfair Display", Georgia, "Noto Serif CJK SC", serif;
 }
 
 /* ===== activity heatmap tokens =====

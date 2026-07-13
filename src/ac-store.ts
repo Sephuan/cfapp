@@ -16,7 +16,7 @@
 // }
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
-import { homedir } from "os";
+import { configDir } from "./paths";
 
 export type Verdict = "AC" | "WA";
 export interface ContestAcEntry {
@@ -37,7 +37,7 @@ interface AcStoreFile {
 // file before exercising the store.
 function storeFile(): string {
   return process.env.CFAPP_AC_STORE_FILE
-    || join(homedir(), ".config", "cfapp", "ac-status.json");
+    || join(configDir(), "ac-status.json");
 }
 
 function emptyStore(): AcStoreFile {

@@ -4,12 +4,12 @@
 // plain bun fetch via withNetworkOptions.
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { configDir } from "../paths";
 import type { CFConfig } from "../config";
 import type { BunFetchInit, SavedCookie, SavedCookieFile } from "./types";
 import { UA, withNetworkOptions } from "./net";
 
-export const CODEFORCES_COOKIE_FILE = join(homedir(), ".config", "cfapp", "codeforces-cookies.json");
+export const CODEFORCES_COOKIE_FILE = join(configDir(), "codeforces-cookies.json");
 
 export class CookieJar {
   private store = new Map<string, SavedCookie>();
@@ -341,7 +341,7 @@ export function loadCodeforcesCookieJar(): CookieJar {
 }
 
 function writeCookieFile(cookies: SavedCookie[], source: string, userAgent?: string): void {
-  mkdirSync(join(homedir(), ".config", "cfapp"), { recursive: true });
+  mkdirSync(configDir(), { recursive: true });
   const data: SavedCookieFile = {
     version: 1,
     savedAt: Date.now(),

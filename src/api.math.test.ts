@@ -102,6 +102,17 @@ describe("renderMathInHtml — bug #3: $$$$$$ is display, not a fence to collaps
     expect(out).not.toContain("$");
     expect(texChunks(out)).toEqual(["w(u, v) = \\frac{\\max(u, v)}{\\gcd(u, v)}"]);
     expect(out).toContain('data-display="1"');
+    // Display uses a block wrapper so it can center (not an inline span).
+    expect(out).toMatch(/<div class="cf-math"[^>]*data-display="1"/);
+  });
+
+  test("bigoplus display (1105B-style) is a centered block wrapper", () => {
+    const src = "<p>r, c: $$$$$$\\bigoplus_{x=i}^{i+r-1} \\bigoplus_{y=j}^{j+c-1} a_{x,y} = 0$$$$$$</p>";
+    const out = renderMathInHtml(src);
+    expect(out).not.toContain("$");
+    expect(out).toContain("katex-display");
+    expect(out).toMatch(/<div class="cf-math"[^>]*data-display="1"/);
+    expect(texChunks(out).some((t) => t.includes("bigoplus"))).toBe(true);
   });
 
   test("a full statement fragment with mixed display+inline has zero stray $", () => {

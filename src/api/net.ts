@@ -4,20 +4,17 @@
 import type { CFConfig } from "../config";
 import type { BunFetchInit } from "./types";
 
-import { homedir } from "os";
 import { join } from "path";
+import { cacheDir, chromeUserAgent } from "../paths";
 
 export const BASE_URL = "https://codeforces.com/api";
-export const CACHE_DIR = join(homedir(), ".cache", "cfapp", "api");
+export const CACHE_DIR = join(cacheDir(), "api");
 
 // CF binds CSRF tokens to session cookies (JSESSIONID, 39ce7, _tta, ...). We
 // also need a realistic UA — CF returns a Cloudflare interstitial for
-// obviously-non-browser UAs. Keep this in sync with CF_USER_AGENT in
-// electron/main.cjs so the curl replay matches what cf_clearance was issued
-// under.
-export const UA =
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
-  "Chrome/148.0.0.0 Safari/537.36";
+// obviously-non-browser UAs. Platform-correct string from paths.ts; Electron
+// main must use the same chromeUserAgent() so cf_clearance matches curl replay.
+export const UA = chromeUserAgent();
 
 export function withNetworkOptions(config: CFConfig | undefined, init: RequestInit): BunFetchInit {
   const next = { ...init } as BunFetchInit;

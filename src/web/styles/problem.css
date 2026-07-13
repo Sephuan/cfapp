@@ -39,7 +39,26 @@
 
 /* KaTeX nudge + lock selection so highlights don't break across math */
 .katex { font-size: 1.1em !important; color: var(--text); }
-.katex-display { margin: 1rem 0 !important; }
+/* Display math: full-width centered block (CF $$$$$$…$$$$$$ / KaTeX displayMode).
+ * .cf-math[data-display="1"] is a <div>; keep both selectors so CDN katex.css
+ * failure still leaves formulas centered. */
+.cf-math[data-display="1"] {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.katex-display {
+  display: block !important;
+  margin: 1rem 0 !important;
+  text-align: center !important;
+}
+.katex-display > .katex {
+  display: inline-block;
+  text-align: center;
+}
 .katex .katex-mathml { user-select: none; }
 
 /* ---- samples ---- */
@@ -171,9 +190,9 @@ mark.cf-hl-purple { background: var(--hl-purple); color: inherit; padding: 0; bo
 [data-theme="dark"] mark { color: var(--text); }
 
 /* inline bilingual translation
- * Coloring is fully driven by --tr-* variables so the three annotation
- * palettes (amber / ink / indigo) recolor every block at once via the
- * [data-tr-theme] attribute on <html>. */
+ * Coloring is fully driven by --tr-* variables so annotation palettes
+ * (amber / ink / indigo / cinnabar / plum) recolor every block at once via
+ * the [data-tr-theme] attribute on <html>. */
 .cf-tr {
   display: block; margin: 0.4rem 0 0.8rem;
   padding: 0.6rem 0.9rem 0.6rem 0.9rem; border-left: 3px solid var(--tr-line);
@@ -220,3 +239,55 @@ mark.cf-hl-purple { background: var(--hl-purple); color: inherit; padding: 0; bo
   line-height: 1; opacity: 0.7;
 }
 .cf-tr-close:hover { color: var(--tr-line); opacity: 1; }
+
+
+/* ---- auto-translate (unified with manual translation) ----
+ * Auto-translate blocks are ordinary .cf-tr entries now, so they reuse all the
+ * existing .cf-tr* rules. The only auto-specific CSS: the zero-width anchor
+ * span (hidden), the error tint for failed segments, the per-segment retry
+ * button, and the compact trigger controls in the problem header. */
+.autotr-anchor { display: none; }
+
+/* Failed-segment block: reuse the .cf-tr frame, tint the message with --err. */
+.cf-tr.cf-tr-error .cf-tr-content { color: var(--err); font-style: italic; }
+.cf-tr-retry {
+  background: none; border: none; padding: 0 0 0 0.5rem; cursor: pointer;
+  font-family: inherit; font-size: 0.8rem; color: var(--accent);
+  text-decoration: none; line-height: 1; font-style: normal;
+}
+.cf-tr-retry:hover { text-decoration: underline; }
+
+/* Full-mode autoCollapse: hide the body until the user expands. */
+.cf-tr.cf-tr-collapsed .cf-tr-body { display: none; }
+.cf-tr-toggle {
+  float: right; cursor: pointer; color: var(--tr-close); font-size: 0.75rem;
+  border: none; background: none; padding: 0 0.5rem 0 0; font-family: inherit;
+  line-height: 1; opacity: 0.85;
+}
+.cf-tr-toggle:hover { color: var(--tr-line); opacity: 1; }
+
+/* Compact auto-translate trigger controls in the problem-limits row: a small
+ * pill-style button group that sits inline with Time/Memory/Rating, using the
+ * 「译」 seal aesthetic so it reads as a translation affordance, not a toolbar. */
+.auto-trigger {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  margin-left: auto; font-style: normal;
+}
+.auto-trigger-btn {
+  padding: 0.2rem 0.65rem; font-size: 0.78rem; font-family: var(--font-display);
+  font-style: italic; font-weight: 500; letter-spacing: 0.01em;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--text); cursor: pointer;
+  white-space: nowrap; line-height: 1.3;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+.auto-trigger-btn:hover:not(:disabled) {
+  border-color: var(--accent); color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.auto-trigger-btn:active:not(:disabled) { transform: translateY(1px); }
+.auto-trigger-btn:disabled { opacity: 0.45; cursor: default; }
+.auto-trigger-err {
+  color: var(--err); font-size: 0.74rem; font-style: italic;
+  font-family: var(--font-display);
+}

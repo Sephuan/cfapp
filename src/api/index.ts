@@ -4,7 +4,7 @@
 //   net.ts    — base URLs, UA, withNetworkOptions
 //   cache.ts  — two-tier cache + stale-while-revalidate
 //   cookie.ts — CookieJar + curl bridge (Cloudflare JA3 bypass)
-//   html.ts   — HTML helpers + KaTeX math renderer (problem statements)
+//   html.ts   — re-export barrel; impl in html-parts/ (text, page-detect, math, statement)
 //   cf-api.ts — CF REST API wrappers (contests, problems, submissions, users)
 //   auth.ts   — session validation, login, code submission
 //

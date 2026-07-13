@@ -1,6 +1,6 @@
 {
   "name": "cfapp-ts",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Codeforces client with web UI, AI translation, and Cloudflare bypass",
   "author": "Sephuan <sephuan@users.noreply.github.com>",
   "homepage": "https://github.com/Sephuan/cfapp",
@@ -24,9 +24,13 @@
     "test": "bun test",
     "build:web": "bun run scripts/build-web.ts",
     "build": "bun run build:web && electron-builder --linux",
+    "build:linux": "bun run build:web && electron-builder --linux",
     "build:rpm": "bun run build:web && electron-builder --linux rpm",
     "build:deb": "bun run build:web && electron-builder --linux deb",
-    "build:appimage": "bun run build:web && electron-builder --linux AppImage"
+    "build:appimage": "bun run build:web && electron-builder --linux AppImage",
+    "build:mac": "bun run build:web && electron-builder --mac",
+    "build:win": "bun run build:web && electron-builder --win",
+    "build:all": "bun run build:web && electron-builder -mwl"
   },
   "devDependencies": {
     "@types/bun": "latest",

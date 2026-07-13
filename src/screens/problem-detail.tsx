@@ -3,13 +3,13 @@ import { useKeyboard } from "@opentui/react";
 import { SyntaxStyle, type TextareaRenderable } from "@opentui/core";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
 import { CFConfig } from "../config";
 import { Problem, getProblemStatement, submitCode, LANGUAGES } from "../api";
+import { configDir } from "../paths";
 
 interface DetailProps { config: CFConfig; problem: Problem; onSubmit: () => void; onBack: () => void; }
 
-const DRAFT_DIR = join(homedir(), ".config", "cfapp", "drafts");
+const DRAFT_DIR = join(configDir(), "drafts");
 
 function draftPath(contestId: number, index: string): string {
   return join(DRAFT_DIR, `${contestId}${index}.txt`);

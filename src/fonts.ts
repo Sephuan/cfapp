@@ -7,8 +7,10 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { customFontsCss, seedMicrosoftGeorgia } from "./custom-fonts";
+import { cacheDir, migrateLegacyDataDirs } from "./paths";
 
-const CACHE_DIR = join(homedir(), ".cache", "cfapp", "fonts");
+const CACHE_DIR = join(cacheDir(), "fonts");
 
 type FontFace = {
   family: string;
@@ -45,11 +47,18 @@ const FACES: FontFace[] = [
     { family: "Source Serif 4", weight: w, style: "italic",
       pkg: "source-serif-4", variant: `source-serif-4-latin-${w}-italic`, file: `source-serif-4-${w}i.woff2` },
   ]),
-  // EB Garamond (statement default + body alternate) — classical Garamond
-  // revival. Primary face for --font-statement (the problem-statement reading
-  // surface) and one of the switchable body fonts. Must be cached: it is NOT
-  // installed system-wide on most machines, so without this the whole
-  // statement surface silently falls back to Georgia.
+  // Georgia — statement default + body option. True Microsoft Georgia is
+  // proprietary and cannot be redistributed; we ship Gelasio (Google Fonts /
+  // Eben Sorkin), an open metric-compatible Georgia-inspired screen serif,
+  // registered under the family name "Georgia" so every CSS stack that says
+  // Georgia resolves without platform system fonts (esp. bare Linux).
+  ...[400, 500, 600, 700].flatMap((w): FontFace[] => [
+    { family: "Georgia", weight: w, style: "normal",
+      pkg: "gelasio", variant: `gelasio-latin-${w}-normal`, file: `georgia-${w}.woff2` },
+    { family: "Georgia", weight: w, style: "italic",
+      pkg: "gelasio", variant: `gelasio-latin-${w}-italic`, file: `georgia-${w}i.woff2` },
+  ]),
+  // EB Garamond (statement + body alternate) — classical Garamond revival.
   ...[400, 500, 600, 700].flatMap((w): FontFace[] => [
     { family: "EB Garamond", weight: w, style: "normal",
       pkg: "eb-garamond", variant: `eb-garamond-latin-${w}-normal`, file: `eb-garamond-${w}.woff2` },
@@ -118,9 +127,15 @@ const FACES: FontFace[] = [
     pkg: "lxgw-wenkai", variant: "lxgw-wenkai-regular",
     file: "lxgw-wenkai-regular.ttf",
     systemPaths: [
+      // Linux
       join(homedir(), ".local/share/fonts/LXGWWenKai-Regular.ttf"),
       "/usr/share/fonts/LXGWWenKai-Regular.ttf",
       "/usr/local/share/fonts/LXGWWenKai-Regular.ttf",
+      // macOS user / library installs
+      join(homedir(), "Library/Fonts/LXGWWenKai-Regular.ttf"),
+      "/Library/Fonts/LXGWWenKai-Regular.ttf",
+      // Windows user fonts
+      join(homedir(), "AppData/Local/Microsoft/Windows/Fonts/LXGWWenKai-Regular.ttf"),
     ],
     directUrls: [
       "https://github.com/lxgw/LxgwWenKai/releases/download/v1.510/LXGWWenKai-Regular.ttf",
@@ -135,6 +150,9 @@ const FACES: FontFace[] = [
       join(homedir(), ".local/share/fonts/LXGWWenKai-Medium.ttf"),
       "/usr/share/fonts/LXGWWenKai-Medium.ttf",
       "/usr/local/share/fonts/LXGWWenKai-Medium.ttf",
+      join(homedir(), "Library/Fonts/LXGWWenKai-Medium.ttf"),
+      "/Library/Fonts/LXGWWenKai-Medium.ttf",
+      join(homedir(), "AppData/Local/Microsoft/Windows/Fonts/LXGWWenKai-Medium.ttf"),
     ],
     directUrls: [
       "https://github.com/lxgw/LxgwWenKai/releases/download/v1.510/LXGWWenKai-Medium.ttf",
@@ -192,7 +210,14 @@ async function downloadOnce(face: FontFace): Promise<boolean> {
 // the meantime. The CSS keeps the same family names so once the woff2 lands,
 // next reload picks it up.
 export function primeFontCache(): void {
+  // Ensure legacy cache (and config, if loadConfig hasn't run yet) is migrated
+  // before we look for FACES under the platform cache dir.
+  try { migrateLegacyDataDirs(); } catch { /* ignore */ }
   if (!existsSync(CACHE_DIR)) mkdirSync(CACHE_DIR, { recursive: true });
+  // Import Microsoft Georgia from a local Windows/Proton install if present
+  // (user-owned file only — never downloaded). Family name is "Microsoft
+  // Georgia" so it does not collide with the open Gelasio "Georgia" faces.
+  try { seedMicrosoftGeorgia(); } catch { /* ignore */ }
   const total = FACES.length;
   let done = 0, ok = 0;
   for (const f of FACES) {
@@ -218,7 +243,8 @@ export function fontFile(name: string): { body: ArrayBuffer; type: string } | nu
   return { body, type };
 }
 
-// CSS served at /fonts/fonts.css — defines @font-face for every cached file.
+// CSS served at /fonts/fonts.css — defines @font-face for every cached file
+// plus user custom fonts under /fonts/custom/*.
 export function fontsCss(): string {
   const lines: string[] = [];
   for (const f of FACES) {
@@ -233,5 +259,7 @@ export function fontsCss(): string {
       `src:url("/fonts/${f.file}") format("${fmt}");}`
     );
   }
+  const extra = customFontsCss();
+  if (extra) lines.push(extra);
   return lines.join("\n");
 }

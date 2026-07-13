@@ -1,16 +1,20 @@
 // Translation-annotation palettes. Picking one writes data-tr-theme onto
 // <html>; CSS variables recolor every existing .cf-tr block instantly.
 // Values must match the [data-tr-theme="…"] selectors in styles/themes.css.
-export type TrTheme = "amber" | "ink" | "indigo";
+export type TrTheme = "amber" | "ink" | "indigo" | "cinnabar" | "plum";
 // name/hint are the Chinese labels; nameEn/hintEn the English ones. The Settings
 // picker chooses per the active app language (see i18n.ts / pickLang below).
 export const TR_THEMES: { id: TrTheme; name: string; nameEn: string; hint: string; hintEn: string; line: string; text: string; labelBg: string; labelFg: string }[] = [
-  { id: "amber",  name: "赭黄", nameEn: "Amber", hint: "暖调浸染，与皮装书调性一致", hintEn: "Warm wash, matches the Leather Book palette",
+  { id: "amber",    name: "赭黄", nameEn: "Amber",    hint: "暖调浸染，与皮装书调性一致", hintEn: "Warm wash, matches the Leather Book palette",
     line: "#b45309", text: "#7c4a12", labelBg: "#b45309", labelFg: "#fff8ec" },
-  { id: "ink",    name: "青墨", nameEn: "Ink", hint: "冷墨批注，与暖正文对仗最克制", hintEn: "Cool ink notes, most restrained against warm body text",
+  { id: "ink",      name: "青墨", nameEn: "Ink",      hint: "冷墨批注，与暖正文对仗最克制", hintEn: "Cool ink notes, most restrained against warm body text",
     line: "#3f6b78", text: "#3f6b78", labelBg: "#3f6b78", labelFg: "#f0f4f5" },
-  { id: "indigo", name: "靛蓝", nameEn: "Indigo", hint: "古典注疏，区分度最高", hintEn: "Classic annotation, highest contrast",
+  { id: "indigo",   name: "靛蓝", nameEn: "Indigo",   hint: "古典注疏，区分度最高", hintEn: "Classic annotation, highest contrast",
     line: "#1e3a8a", text: "#1e3a8a", labelBg: "#1e3a8a", labelFg: "#eef2ff" },
+  { id: "cinnabar", name: "朱砂", nameEn: "Cinnabar", hint: "传统批注红，醒目如朱笔圈点", hintEn: "Scholar's vermilion — bold as a red brush mark",
+    line: "#b91c1c", text: "#9f1239", labelBg: "#b91c1c", labelFg: "#fff5f5" },
+  { id: "plum",     name: "紫藤", nameEn: "Plum",     hint: "淡紫批注，与紫罗兰主题最相宜", hintEn: "Soft wisteria notes, pairs best with Violet",
+    line: "#6d28d9", text: "#5b21b6", labelBg: "#6d28d9", labelFg: "#f5f3ff" },
 ];
 
 // Resolve a bilingual pair for the active language. Kept here so themes.ts owns
@@ -23,7 +27,7 @@ export function pickLang<T>(lang: "en" | "zh" | "mix", zh: T, en: T): T {
 export function readTrTheme(): TrTheme {
   try {
     const v = localStorage.getItem("cfapp:tr-theme");
-    if (v === "ink" || v === "indigo") return v;
+    if (v && TR_THEMES.some((t) => t.id === v)) return v as TrTheme;
   } catch {}
   return "amber";
 }
@@ -82,8 +86,19 @@ export function applyColorTheme(t: ColorTheme) {
 //
 // A choice's `id` is the value written to data-font-<role> and localStorage;
 // the empty-string id is the default (no attribute → CSS :root stack wins).
-// `system: true` means the primary family is a system/OS font we don't ship
-// (e.g. Georgia) — the picker shows "系统" instead of a load ✓/✗ badge.
+// `system: true` means the primary family is a pure OS font we don't ship
+// via fonts.ts — the picker shows "系统" instead of a load ✓/✗ badge.
+//
+// Built-in "Georgia" is Gelasio (open, metric-compatible), registered as
+// font-family "Georgia". Real Microsoft Georgia cannot be redistributed; it
+// is imported into the custom-font library as "Microsoft Georgia" when the
+// user already has the TTF locally (Proton / Wine / msttcorefonts).
+//
+// id "custom" is special: the CSS family comes from --font-<role>-custom
+// (set by applyFont with a family name) and localStorage key
+// cfapp:font-<role>-family.
+export const CUSTOM_FONT_CHOICE_ID = "custom";
+
 export type FontChoice = {
   id: string;
   name: string;
@@ -112,19 +127,21 @@ export const FONT_ROLES: FontRole[] = [
       { id: "lora",         name: "Lora",           hint: "笔刷衬线，暖调柔和",         hintEn: "Brush serif, warm & soft",                family: "Lora" },
       { id: "spectral",     name: "Spectral",       hint: "文学正文衬线，精致文气",     hintEn: "Literary text serif, refined",            family: "Spectral" },
       { id: "bitter",       name: "Bitter",         hint: "板衬线，方正厚实",           hintEn: "Slab serif, square & sturdy",             family: "Bitter" },
-      { id: "georgia",      name: "Georgia",        hint: "系统衬线，屏幕易读",         hintEn: "System serif, screen-legible",            family: "Georgia", system: true },
+      { id: "georgia",      name: "Georgia",        hint: "Gelasio 开源近似（项目缓存）", hintEn: "Gelasio open approx. (bundled)",          family: "Georgia" },
+      { id: CUSTOM_FONT_CHOICE_ID, name: "自定义…", hint: "使用已上传的自定义字体",       hintEn: "Use an uploaded custom font",            family: "" },
     ],
   },
   {
     key: "statement", cssVar: "--font-statement", label: "题面字体", labelEn: "Statement font",
     preview: "You are given an array of n integers.",
     choices: [
-      { id: "",             name: "Georgia",        hint: "系统衬线，屏幕易读（默认）", hintEn: "System serif, screen-legible (default)",  family: "Georgia", system: true },
+      { id: "",             name: "Georgia",        hint: "Gelasio 开源近似（默认缓存）", hintEn: "Gelasio open approx. (default, bundled)", family: "Georgia" },
       { id: "eb-garamond",  name: "EB Garamond",    hint: "古典 Garamond，书卷气",     hintEn: "Classic Garamond, bookish",               family: "EB Garamond" },
       { id: "source-serif", name: "Source Serif 4", hint: "Adobe 正文衬线，素净端正",   hintEn: "Adobe text serif, clean & upright",       family: "Source Serif 4" },
       { id: "lora",         name: "Lora",           hint: "笔刷衬线，暖调柔和",         hintEn: "Brush serif, warm & soft",                family: "Lora" },
       { id: "spectral",     name: "Spectral",       hint: "文学正文衬线，精致文气",     hintEn: "Literary text serif, refined",            family: "Spectral" },
       { id: "libre-baskerville", name: "Libre Baskerville", hint: "高对比 Baskerville，字大清晰", hintEn: "High-contrast Baskerville, large & clear", family: "Libre Baskerville" },
+      { id: CUSTOM_FONT_CHOICE_ID, name: "自定义…", hint: "使用已上传的自定义字体",       hintEn: "Use an uploaded custom font",            family: "" },
     ],
   },
   {
@@ -133,27 +150,154 @@ export const FONT_ROLES: FontRole[] = [
     choices: [
       { id: "",             name: "Playfair Display", hint: "高对比展示衬线（默认）",   hintEn: "High-contrast display serif (default)",   family: "Playfair Display" },
       { id: "cormorant",    name: "Cormorant",        hint: "古典 Garamond 展示体，优雅", hintEn: "Classic Garamond display, elegant",     family: "Cormorant Garamond" },
+      { id: CUSTOM_FONT_CHOICE_ID, name: "自定义…",   hint: "使用已上传的自定义字体",     hintEn: "Use an uploaded custom font",            family: "" },
     ],
   },
 ];
 
 const storageKey = (roleKey: string) => `cfapp:font-${roleKey}`;
+const familyStorageKey = (roleKey: string) => `cfapp:font-${roleKey}-family`;
 const dataAttr = (roleKey: string) => `data-font-${roleKey}`;
+const customCssVar = (roleKey: string) => `--font-${roleKey}-custom`;
+
+// Written when the user deliberately picks the built-in default (id "").
+// Distinct from a missing key (never configured), so auto-prefer of
+// Microsoft Georgia only runs once for brand-new installs — not after the
+// user explicitly chooses Gelasio/"default" again.
+export const FONT_DEFAULT_SENTINEL = "__default__";
+
+export type ApplyFontOpts = {
+  /**
+   * true (default): write localStorage (user action or intentional preference).
+   * false: restore DOM from already-stored prefs only — do not invent a
+   * preference. Critical so applyAllFonts() does not stamp "__default__" and
+   * block preferMicrosoftGeorgiaIfUnset on first launch.
+   */
+  persist?: boolean;
+};
 
 export function readFont(role: FontRole): string {
   try {
     const v = localStorage.getItem(storageKey(role.key));
-    if (v && role.choices.some((c) => c.id === v)) return v;
+    if (v === null) return "";
+    // Explicit built-in default (or legacy empty string).
+    if (v === FONT_DEFAULT_SENTINEL || v === "") return "";
+    if (v === CUSTOM_FONT_CHOICE_ID) return CUSTOM_FONT_CHOICE_ID;
+    if (role.choices.some((c) => c.id === v)) return v;
   } catch {}
   return "";
 }
-export function applyFont(role: FontRole, id: string) {
-  // "" = default: clear the attribute so the :root stack in themes.css wins.
-  if (id === "") document.documentElement.removeAttribute(dataAttr(role.key));
-  else document.documentElement.setAttribute(dataAttr(role.key), id);
-  try { localStorage.setItem(storageKey(role.key), id); } catch {}
+
+/** true only when the user has never written cfapp:font-<role> (first run). */
+export function isFontPreferenceUnset(roleKey: string): boolean {
+  try {
+    return localStorage.getItem(storageKey(roleKey)) === null;
+  } catch {
+    return true;
+  }
 }
+
+export function readCustomFontFamily(role: FontRole): string {
+  try {
+    return localStorage.getItem(familyStorageKey(role.key)) || "";
+  } catch {
+    return "";
+  }
+}
+
+function setCustomFamilyVar(roleKey: string, family: string) {
+  const el = document.documentElement;
+  if (family) {
+    // CSS var holds a quoted family so stacks can do: var(--font-X-custom), …
+    el.style.setProperty(customCssVar(roleKey), `"${family.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
+  } else {
+    el.style.removeProperty(customCssVar(roleKey));
+  }
+}
+
+/**
+ * Apply a font role pick.
+ * @param id built-in choice id, "" for default, or CUSTOM_FONT_CHOICE_ID
+ * @param customFamily required when id === "custom" — CSS font-family name
+ */
+export function applyFont(role: FontRole, id: string, customFamily?: string, opts?: ApplyFontOpts) {
+  const persist = opts?.persist !== false;
+  const el = document.documentElement;
+  if (id === CUSTOM_FONT_CHOICE_ID) {
+    const fam = (customFamily ?? readCustomFontFamily(role)).trim();
+    if (!fam) {
+      // Custom selected but no family yet — fall back to default until the
+      // user picks one in the secondary dropdown.
+      el.removeAttribute(dataAttr(role.key));
+      setCustomFamilyVar(role.key, "");
+      if (persist) {
+        try {
+          localStorage.setItem(storageKey(role.key), CUSTOM_FONT_CHOICE_ID);
+        } catch {}
+      }
+      return;
+    }
+    el.setAttribute(dataAttr(role.key), CUSTOM_FONT_CHOICE_ID);
+    setCustomFamilyVar(role.key, fam);
+    if (persist) {
+      try {
+        localStorage.setItem(storageKey(role.key), CUSTOM_FONT_CHOICE_ID);
+        localStorage.setItem(familyStorageKey(role.key), fam);
+      } catch {}
+    }
+    return;
+  }
+
+  // Leaving custom: drop the CSS var so it doesn't leak into other stacks.
+  setCustomFamilyVar(role.key, "");
+  if (persist) {
+    try { localStorage.removeItem(familyStorageKey(role.key)); } catch {}
+  }
+
+  // "" = built-in default: clear the attribute so the :root stack wins.
+  if (id === "") {
+    el.removeAttribute(dataAttr(role.key));
+    if (persist) {
+      // Stamp an explicit "user chose default" marker — do NOT removeItem.
+      // Missing key is reserved for "never configured" (auto-prefer MS Georgia).
+      try { localStorage.setItem(storageKey(role.key), FONT_DEFAULT_SENTINEL); } catch {}
+    }
+  } else {
+    el.setAttribute(dataAttr(role.key), id);
+    if (persist) {
+      try { localStorage.setItem(storageKey(role.key), id); } catch {}
+    }
+  }
+}
+
 // Restore every role's saved pick — called once on startup.
+// persist:false so we never invent "__default__" for never-configured roles.
 export function applyAllFonts() {
-  for (const role of FONT_ROLES) applyFont(role, readFont(role));
+  for (const role of FONT_ROLES) {
+    const id = readFont(role);
+    if (id === CUSTOM_FONT_CHOICE_ID) {
+      applyFont(role, CUSTOM_FONT_CHOICE_ID, readCustomFontFamily(role), { persist: false });
+    } else {
+      applyFont(role, id, undefined, { persist: false });
+    }
+  }
+}
+
+/**
+ * After custom fonts are loaded: if the user has **never** set a statement
+ * pick (key absent) and Microsoft Georgia is in the library, prefer it for
+ * statement (local MS TTF rather than open Gelasio "Georgia" default).
+ *
+ * Does NOT run when the user has explicitly chosen the built-in default
+ * (FONT_DEFAULT_SENTINEL) or any other pick — including after they switch
+ * back from MS Georgia to default.
+ */
+export function preferMicrosoftGeorgiaIfUnset(msFamily: string, availableFamilies: string[]) {
+  if (!msFamily || !availableFamilies.includes(msFamily)) return;
+  try {
+    if (!isFontPreferenceUnset("statement")) return;
+    const role = FONT_ROLES.find((r) => r.key === "statement");
+    if (!role) return;
+    applyFont(role, CUSTOM_FONT_CHOICE_ID, msFamily, { persist: true });
+  } catch {}
 }

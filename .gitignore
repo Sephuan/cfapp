@@ -1,41 +1,54 @@
-# dependencies (bun install)
+# =============================================================================
+# DO NOT MODIFY THIS FILE.
+# 禁止修改本文件。
+#
+# Release / publish policy is fixed here. Agents and local tools must not edit
+# this file. If a change is truly required, the human owner does it explicitly
+# (chmod +w → edit → chmod -w) — never silent drive-by edits.
+# =============================================================================
+
+# Everything that starts with a dot (AI tools, caches, editor dirs, env, …).
+# Re-include only what must be versioned.
+.*
+!.gitignore
+# Uncomment if you add GitHub Actions / issue templates:
+# !.github/
+
+# dependencies
 node_modules
 
-# output
+# build / packaging output
 out
 dist
+dist-web
 *.tgz
+*.AppImage
+*.deb
+*.rpm
+*.dmg
+*.exe
+*.msi
 
-# code coverage
+# local standalone / packaged binaries (not the electron/ or src/ tree)
+/cfapp
+
+# logs & coverage
+logs
+*.log
 coverage
 *.lcov
-
-# logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
-
-# dotenv environment variable files
-.env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
-
-# caches
-.eslintcache
-.cache
 *.tsbuildinfo
-.cftui-cache
 
-# IntelliJ based IDEs
-.idea
-.trae
+# OS / editor junk (non-dot)
+Thumbs.db
+*.swp
+*~
 
-# Finder (MacOS) folder config
-.DS_Store
+# agent instruction dumps (not release surface)
+CLAUDE.md
+AGENTS.md
 
-# personal bootstrap — contains real CF/AI secrets, never commit
+# personal bootstrap — real CF/AI secrets
 scripts/seed-config.ts
 
 # stray local artifacts

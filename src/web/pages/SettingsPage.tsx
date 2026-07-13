@@ -1,21 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppConfig } from "../shared";
 import {
-  COLOR_THEMES, TR_THEMES, FONT_ROLES,
-  applyColorTheme, applyTrTheme, applyFont,
-  readColorTheme, readTrTheme, readFont, pickLang,
-  type ColorTheme, type TrTheme, type FontRole,
+  COLOR_THEMES, TR_THEMES,
+  applyColorTheme, applyTrTheme,
+  readColorTheme, readTrTheme, pickLang,
+  type ColorTheme, type TrTheme,
 } from "../themes";
-import { useLang, t, setLang, AI_TARGET_PRESETS, type Lang, type StrKey } from "../i18n";
+import { useLang, t, setLang } from "../i18n";
 import { DEFAULT_TRANSLATE_PROMPT } from "../../api/translate-prompt";
+import { normalizeConfig } from "./settings/normalize-config";
+import { FontsSection, FontInfoTable } from "./settings/FontSettings";
+import { AiTargetPicker } from "./settings/AiTargetPicker";
+import { ModelPicker } from "./settings/ModelPicker";
+import { AutoTranslateSettings } from "./settings/AutoTranslateSettings";
 
-// Fill in fields an older server (or a config.json predating a feature) may omit,
-// so the form never renders a blank control for something that has a default.
-// Chiefly: ai.promptTemplate — a server running pre-promptTemplate code returns
-// it as undefined, which would show an empty textarea and a spurious "reset" link.
-function normalizeConfig(c: AppConfig): AppConfig {
-  return { ...c, ai: { ...c.ai, promptTemplate: c.ai?.promptTemplate || DEFAULT_TRANSLATE_PROMPT, stream: c.ai?.stream ?? true } };
-}
+const AUTOSAVE_MS = 400;
 
 export function SettingsPage({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTheme: () => void }) {
   const [lang] = useLang();
@@ -36,6 +35,15 @@ export function SettingsPage({ theme, onToggleTheme }: { theme: "light" | "dark"
   const [local, setLocal] = useState<AppConfig | null>(null);
   useEffect(() => { if (cfg && !local) setLocal(cfg); }, [cfg, local]);
 
+  // Auto-save: every field change schedules a debounced PUT of the full form.
+  // pendingRef holds the latest snapshot so a slow response never overwrites a
+  // newer local edit (we never setLocal from the PUT response while typing).
+  const pendingRef = useRef<AppConfig | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveGenRef = useRef(0);
+  const langRef = useRef(lang);
+  langRef.current = lang;
+
   // Fetch config on mount
   useEffect(() => {
     fetch("/api/config")
@@ -44,74 +52,77 @@ export function SettingsPage({ theme, onToggleTheme }: { theme: "light" | "dark"
       .catch(() => {});
   }, []);
 
-  const onSave = async () => {
-    if (!local) return;
-    setMsg(null);
+  // Flush any pending autosave when leaving the page.
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      const pending = pendingRef.current;
+      if (pending) {
+        pendingRef.current = null;
+        void fetch("/api/config", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(pending),
+        }).catch(() => {});
+      }
+    };
+  }, []);
+
+  const flushPersist = async (next: AppConfig) => {
+    const gen = ++saveGenRef.current;
     try {
       const r = await fetch("/api/config", {
         method: "PUT", headers: { "content-type": "application/json" },
-        body: JSON.stringify(local),
+        body: JSON.stringify(next),
       });
-      const j = await r.json();
-      setLocal(normalizeConfig(j));
-      setMsg({ ok: true, text: t(lang, "set.saved") });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      // Ignore stale responses — a newer keystroke already supersedes this save.
+      if (gen !== saveGenRef.current) return;
+      pendingRef.current = null;
+      setMsg({ ok: true, text: t(langRef.current, "set.saved") });
     } catch (e: any) {
-      setMsg({ ok: false, text: e.message });
+      if (gen !== saveGenRef.current) return;
+      setMsg({ ok: false, text: e.message || String(e) });
     }
   };
 
+  const schedulePersist = (next: AppConfig) => {
+    setLocal(next);
+    pendingRef.current = next;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      const toSave = pendingRef.current;
+      if (toSave) void flushPersist(toSave);
+    }, AUTOSAVE_MS);
+  };
+
   if (!local) return <div className="container"><div className="loading">{t(lang, "set.loading")}</div></div>;
-  const upd = (patch: Partial<AppConfig>) => setLocal({ ...local, ...patch });
-  const updAi = (patch: Partial<AppConfig["ai"]>) => setLocal({ ...local, ai: { ...local.ai, ...patch } });
+  const upd = (patch: Partial<AppConfig>) => schedulePersist({ ...local, ...patch });
+  const updAi = (patch: Partial<AppConfig["ai"]>) => schedulePersist({ ...local, ai: { ...local.ai, ...patch } });
 
-  // The translation target language auto-persists the moment it changes (like
-  // the app-language toggle), so it doesn't silently revert if the user leaves
-  // Settings without hitting Save. Sends only the targetLang delta; the server
-  // merges it (undefined fields keep their stored value) so we never clobber
-  // secrets the form doesn't hold in cleartext.
-  const persistTargetLang = async (targetLang: string) => {
-    updAi({ targetLang });
-    try {
-      const r = await fetch("/api/config", {
-        method: "PUT", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ai: { targetLang } }),
-      });
-      const j = await r.json();
-      setLocal(prev => (prev ? { ...prev, ai: { ...prev.ai, targetLang: j.ai.targetLang } } : prev));
-      setMsg({ ok: true, text: t(lang, "set.saved") });
-    } catch { /* keep the optimistic local value */ }
+  // Immediate persist (toggles / presets): skip the debounce so a single click
+  // is durable before the user navigates away.
+  const persistNow = (next: AppConfig) => {
+    setLocal(next);
+    pendingRef.current = next;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    void flushPersist(next);
   };
-
-  // Same auto-persist contract as the target language: the prompt textarea
-  // commits on blur (and on reset) so leaving Settings without hitting Save
-  // doesn't silently discard the edit. Sends only the promptTemplate delta so
-  // the server merge keeps every other (secret) field untouched.
-  const persistPromptTemplate = async (promptTemplate: string) => {
-    updAi({ promptTemplate });
-    try {
-      const r = await fetch("/api/config", {
-        method: "PUT", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ai: { promptTemplate } }),
-      });
-      const j = await r.json();
-      setLocal(prev => (prev ? { ...prev, ai: { ...prev.ai, promptTemplate: j.ai?.promptTemplate || promptTemplate } } : prev));
-      setMsg({ ok: true, text: t(lang, "set.saved") });
-    } catch { /* keep the optimistic local value */ }
-  };
-
-  // Streaming toggle also auto-persists (a boolean, so send it through as-is).
-  const persistStream = async (stream: boolean) => {
-    updAi({ stream });
-    try {
-      const r = await fetch("/api/config", {
-        method: "PUT", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ai: { stream } }),
-      });
-      const j = await r.json();
-      setLocal(prev => (prev ? { ...prev, ai: { ...prev.ai, stream: j.ai?.stream ?? stream } } : prev));
-      setMsg({ ok: true, text: t(lang, "set.saved") });
-    } catch { /* keep the optimistic local value */ }
-  };
+  const persistTargetLang = (targetLang: string) => persistNow({ ...local, ai: { ...local.ai, targetLang } });
+  const persistPromptTemplate = (promptTemplate: string) => persistNow({ ...local, ai: { ...local.ai, promptTemplate } });
+  const persistStream = (stream: boolean) => persistNow({ ...local, ai: { ...local.ai, stream } });
+  const persistModel = (model: string) => persistNow({ ...local, ai: { ...local.ai, model } });
+  // Auto-translate controls persist immediately too (toggles/dropdowns, like
+  // stream/model) so a pick is durable before the user navigates away.
+  const persistAiNow = (patch: Partial<AppConfig["ai"]>) =>
+    persistNow({ ...local, ai: { ...local.ai, ...patch } });
 
   const secretBtn = (shown: boolean, toggle: () => void) => (
     <button
@@ -121,12 +132,17 @@ export function SettingsPage({ theme, onToggleTheme }: { theme: "light" | "dark"
       style={{ background: "none", border: "1px solid var(--border)", borderRadius: 5, cursor: "pointer", padding: "0.3rem 0.5rem", fontSize: "0.9rem", lineHeight: 1, color: "var(--text)" }}
     >{shown ? "🙈" : "👁"}</button>
   );
+  // Real value always; type=password masks via the browser. Never substitute
+  // "***" as the controlled value — that blocked mid-edit and corrupted the
+  // secret on the first keystroke while hidden.
   const secretInput = (shown: boolean, value: string, onChange: (v: string) => void, placeholder: string) => (
     <input
       type={shown ? "text" : "password"}
-      value={shown ? value : (value ? "***" : "")}
+      value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
+      autoComplete="off"
+      spellCheck={false}
       style={{ flex: 1 }}
     />
   );
@@ -164,6 +180,17 @@ export function SettingsPage({ theme, onToggleTheme }: { theme: "light" | "dark"
           <span className="hint">{t(lang, "set.password.hint")}</span>
         </div>
 
+        <h2 style={{ marginTop: "1.6rem" }}>{t(lang, "set.h.language")}</h2>
+        <div className="field">
+          <label>{t(lang, "set.appLang")}</label>
+          <div className="mode-toggle">
+            <button className="mode-btn" aria-pressed={lang === "en"} onClick={() => setLang("en")}>English</button>
+            <button className="mode-btn" aria-pressed={lang === "zh"} onClick={() => setLang("zh")}>中文</button>
+            <button className="mode-btn" aria-pressed={lang === "mix"} onClick={() => setLang("mix")}>{t(lang, "set.appLang.mix")}</button>
+          </div>
+          <span className="hint">{t(lang, "set.appLang.hint")}</span>
+        </div>
+
         <h2 style={{ marginTop: "1.6rem" }}>{t(lang, "set.h.ai")}</h2>
         <div className="field">
           <label>{t(lang, "set.baseUrl")}</label>
@@ -177,10 +204,7 @@ export function SettingsPage({ theme, onToggleTheme }: { theme: "light" | "dark"
             {secretBtn(showAiKey, () => setShowAiKey(!showAiKey))}
           </div>
         </div>
-        <div className="field">
-          <label>{t(lang, "set.model")}</label>
-          <input value={local.ai.model} onChange={e => updAi({ model: e.target.value })} placeholder="" />
-        </div>
+        <ModelPicker lang={lang} value={local.ai.model} baseUrl={local.ai.baseUrl} apiKey={local.ai.apiKey} onLive={v => updAi({ model: v })} onCommit={v => persistModel(v)} />
         <AiTargetPicker lang={lang} value={local.ai.targetLang} onLive={v => updAi({ targetLang: v })} onCommit={persistTargetLang} />
         <div className="field">
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.6rem" }}>
@@ -216,16 +240,7 @@ export function SettingsPage({ theme, onToggleTheme }: { theme: "light" | "dark"
           <span className="hint">{t(lang, "set.stream.hint")}</span>
         </div>
 
-        <h2 style={{ marginTop: "1.6rem" }}>{t(lang, "set.h.language")}</h2>
-        <div className="field">
-          <label>{t(lang, "set.appLang")}</label>
-          <div className="mode-toggle">
-            <button className="mode-btn" aria-pressed={lang === "en"} onClick={() => setLang("en")}>English</button>
-            <button className="mode-btn" aria-pressed={lang === "zh"} onClick={() => setLang("zh")}>中文</button>
-            <button className="mode-btn" aria-pressed={lang === "mix"} onClick={() => setLang("mix")}>{t(lang, "set.appLang.mix")}</button>
-          </div>
-          <span className="hint">{t(lang, "set.appLang.hint")}</span>
-        </div>
+        <AutoTranslateSettings lang={lang} ai={local.ai} persist={persistAiNow} />
 
         <h2 style={{ marginTop: "1.6rem" }}>{t(lang, "set.h.theme")}</h2>
         <div className="field">
@@ -292,175 +307,19 @@ export function SettingsPage({ theme, onToggleTheme }: { theme: "light" | "dark"
         </div>
 
         <h2 style={{ marginTop: "1.6rem" }}>{t(lang, "set.h.fonts")}</h2>
-        {FONT_ROLES.map(role => <FontRolePicker key={role.key} role={role} lang={lang} />)}
+        <FontsSection lang={lang} />
 
         <h2 style={{ marginTop: "1.6rem" }}>{t(lang, "set.h.fontInfo")}</h2>
         <FontInfoTable lang={lang} />
 
-        <div className="row">
-          <button className="primary" onClick={onSave}>{t(lang, "set.save")}</button>
-          {msg && <span className={`save-msg ${msg.ok ? "" : "err"}`}>{msg.text}</span>}
-        </div>
+        {/* Autosave only — every field commits via schedulePersist / persistNow.
+            Surface the last save status (or error) without a manual Save button. */}
+        {msg && (
+          <div className="row">
+            <span className={`save-msg ${msg.ok ? "" : "err"}`}>{msg.text}</span>
+          </div>
+        )}
       </div>
-    </div>
-  );
-}
-
-// Read-only diagnostic rows for the roles the user can't switch (the switchable
-// ones — body/statement/display — get live pickers above). Shows which primary
-// family each role resolved to and whether it actually loaded.
-const DIAG_ROLES = [
-  { labelKey: "diag.tr" as StrKey, cssVar: "--font-cjk", sample: "给你一个数组 a…", sampleStyle: {} },
-  { labelKey: "diag.trLabel" as StrKey, cssVar: "--font-cjk-label", sample: "译", sampleStyle: { fontWeight: 700, fontSize: "0.8rem" } },
-  { labelKey: "diag.code" as StrKey, cssVar: "--font-code", sample: "int main() {}", sampleStyle: {} },
-] as const;
-
-// Per-family load state. `document.fonts.load()` resolves with the matched
-// FontFace list once the @font-face has downloaded (or immediately, empty, if
-// no rule matches the family → it will render as a system fallback). That lets
-// us honestly distinguish "loaded" from "silently fell back", which the old
-// picker couldn't show.
-type LoadState = "loading" | "loaded" | "fallback";
-function useFontLoadStatus(families: string[]): Record<string, LoadState> {
-  const key = families.join("|");
-  const [status, setStatus] = useState<Record<string, LoadState>>({});
-  useEffect(() => {
-    let cancelled = false;
-    setStatus(Object.fromEntries(families.map(f => [f, "loading" as LoadState])));
-    for (const fam of families) {
-      document.fonts.load(`16px "${fam}"`)
-        .then(faces => {
-          if (cancelled) return;
-          setStatus(s => ({ ...s, [fam]: faces.length > 0 ? "loaded" : "fallback" }));
-        })
-        .catch(() => { if (!cancelled) setStatus(s => ({ ...s, [fam]: "fallback" })); });
-    }
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-  return status;
-}
-
-const LOAD_LABEL: Record<LoadState, StrKey> = { loading: "font.loading", loaded: "font.loaded", fallback: "font.fallback" };
-
-// One compact picker per font role: a native dropdown to choose the face plus a
-// single live-preview bar rendering the *selected* choice, so the section stays
-// short no matter how many fonts a role offers. Owns its own selection state
-// (seeded from localStorage) so adding a role is zero-wiring: SettingsPage just
-// maps over FONT_ROLES. Applying a pick flips the data attribute — no re-render.
-function FontRolePicker({ role, lang }: { role: FontRole; lang: Lang }) {
-  const [value, setValue] = useState<string>(() => readFont(role));
-  const load = useFontLoadStatus(role.choices.map(c => c.family));
-  const current = role.choices.find(c => c.id === value) ?? role.choices[0]!;
-  // System fonts (Georgia) aren't shipped by fonts.ts, so a load probe is
-  // meaningless — always show them as "系统" available.
-  const st: LoadState | "system" = current.system ? "system" : (load[current.family] ?? "loading");
-  return (
-    <div className="field">
-      <label>{pickLang(lang, role.label, role.labelEn)}</label>
-      <div className="font-row">
-        <select
-          className="font-select"
-          value={value}
-          onChange={e => { setValue(e.target.value); applyFont(role, e.target.value); }}
-        >
-          {role.choices.map(c => (
-            <option key={c.id || "default"} value={c.id}>
-              {c.name}{c.id === "" ? t(lang, "set.default") : ""}
-            </option>
-          ))}
-        </select>
-        <span className={`fp-status fp-${st}`}>{st === "system" ? t(lang, "set.system") : t(lang, LOAD_LABEL[st])}</span>
-      </div>
-      {/* Latin falls to Georgia (matching the real stacks) then CJK to LXGW, so
-          the preview is honest whether or not the face loaded. Sample text
-          mirrors what this role actually renders (role.preview). */}
-      <div className="font-preview" style={{ fontFamily: `"${current.family}", Georgia, var(--font-cjk)` }}>
-        {role.preview}
-      </div>
-      <span className="fp-hint">{pickLang(lang, current.hint, current.hintEn)}</span>
-    </div>
-  );
-}
-
-function FontInfoTable({ lang }: { lang: Lang }) {
-  const [info, setInfo] = useState<{ primary: string; loaded: boolean }[]>([]);
-
-  useEffect(() => {
-    const check = () => {
-      const root = getComputedStyle(document.documentElement);
-      setInfo(DIAG_ROLES.map(r => {
-        const stack = root.getPropertyValue(r.cssVar).trim();
-        const primary = stack.split(",")[0]?.trim().replace(/^"|"$/g, "") || "serif";
-        const loaded = document.fonts.check(`16px "${primary}"`);
-        return { primary, loaded };
-      }));
-    };
-    document.fonts.ready.then(check);
-    document.fonts.addEventListener("loadingdone", check);
-    return () => document.fonts.removeEventListener("loadingdone", check);
-  }, []);
-
-  if (!info.length) return null;
-
-  return (
-    <table className="font-info">
-      <tbody>
-        {DIAG_ROLES.map((r, i) => (
-          <tr key={r.cssVar}>
-            <th>{t(lang, r.labelKey)}</th>
-            <td>
-              <span className={info[i]?.loaded ? "fi-loaded" : "fi-fallback"}>
-                {info[i]?.primary} {info[i]?.loaded ? "✓" : t(lang, "font.notLoaded")}
-              </span>
-              <br />
-              <span className="fi-sample" style={{ fontFamily: `var(${r.cssVar})`, ...r.sampleStyle }}>{r.sample}</span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-// AI-translation target language: a preset dropdown plus a "Custom…" entry that
-// reveals a free-text field. The stored value is the plain language name that
-// gets interpolated into the translate system prompt (api/translate-prompt.ts).
-// A value not in the preset list is treated as custom (so a config saved with a
-// hand-typed language still shows its text on reload).
-//
-// This control persists on its own (no Save needed): picking a preset commits
-// immediately; the custom field updates the form live (onLive) and commits on
-// blur (onCommit), so a half-typed language doesn't fire a PUT per keystroke.
-function AiTargetPicker({ lang, value, onLive, onCommit }: { lang: Lang; value: string; onLive: (v: string) => void; onCommit: (v: string) => void }) {
-  const isPreset = AI_TARGET_PRESETS.includes(value);
-  const [custom, setCustom] = useState(!isPreset && value !== "");
-  return (
-    <div className="field">
-      <label>{t(lang, "set.aiTarget")}</label>
-      <div className="font-row">
-        <select
-          className="font-select"
-          value={custom ? "__custom__" : value}
-          onChange={e => {
-            if (e.target.value === "__custom__") { setCustom(true); }
-            else { setCustom(false); onCommit(e.target.value); }
-          }}
-        >
-          {AI_TARGET_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
-          <option value="__custom__">{t(lang, "set.aiTarget.custom")}</option>
-        </select>
-      </div>
-      {custom && (
-        <input
-          style={{ marginTop: "0.4rem" }}
-          value={isPreset ? "" : value}
-          onChange={e => onLive(e.target.value)}
-          onBlur={e => { const v = e.target.value.trim(); if (v) onCommit(v); }}
-          placeholder={t(lang, "set.aiTarget.customPh")}
-        />
-      )}
-      <span className="hint">{t(lang, "set.aiTarget.hint")}</span>
     </div>
   );
 }

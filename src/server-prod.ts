@@ -2,10 +2,9 @@
 // frontend from dist-web/ instead of using Bun's HTML import (which
 // requires the runtime bundler and fails in packaged builds).
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join, extname } from "path";
 import { homedir } from "os";
-import katex from "katex";
 import { loadConfig, saveConfig, isAuthenticated, type CFConfig } from "./config";
 import {
   getContests, getContestProblems, getProblemStatementStructured,
@@ -20,111 +19,21 @@ import {
 import { mergeContestAc, mergeContestAcBulk, recordProblemCount, loadAcSummary, loadContestAc } from "./ac-store";
 import { buildTranslateMessages } from "./api/translate-prompt";
 import { buildTranslateStreamResponse } from "./api/translate-stream";
+import { renderTranslationHtml } from "./api/render-translation";
+import { listAiModels, testAiChat, probeAiRateLimit } from "./api/ai-probe";
 import { primeFontCache, fontFile, fontsCss } from "./fonts";
+import {
+  listCustomFonts, addCustomFont, deleteCustomFont,
+  customFontFile, importCustomFontFromPath, MS_GEORGIA_FAMILY,
+} from "./custom-fonts";
+import { loadDraft, saveDraft } from "./server-lib/drafts";
+import { json } from "./server-lib/json";
+import { sanitize } from "./server-lib/sanitize";
 
 const DIST_WEB = join(import.meta.dir, "..", "dist-web");
 const indexHtml = readFileSync(join(DIST_WEB, "index.html"), "utf-8");
 
-const DRAFT_DIR = join(homedir(), ".config", "cfapp", "drafts");
 
-function renderTranslationHtml(input: string): string {
-  if (!input) return "";
-  const slots: string[] = [];
-  const stash = (raw: string, displayMode: boolean) => {
-    try {
-      const html = katex.renderToString(raw, { displayMode, throwOnError: false, output: "html" });
-      slots.push(html);
-    } catch {
-      slots.push(`<code>${escapeHtml(raw)}</code>`);
-    }
-    return ` MATH${slots.length - 1} `;
-  };
-  // Our TeX extractor (highlight.ts) emits $$$…$$$ for display math and $…$ for
-  // inline, so render the triple-dollar form in displayMode → it centers as a
-  // block instead of sitting inline.
-  let s = input.replace(/\$\$\$([\s\S]+?)\$\$\$/g, (_, m) => stash(m, true));
-  s = s.replace(/\$([^\n$]+?)\$/g, (_, m) => stash(m, false));
-  s = escapeHtml(s);
-  // Inline code only. We deliberately do NOT render **bold** / *italic*:
-  // competitive-programming statements use "*" and "**" as literal content
-  // (string examples like "u****u", multiplication), and the translation prompt
-  // no longer asks the model to emit markdown emphasis — so any emphasis pass
-  // here only corrupts literal asterisks into <strong>/<em>.
-  s = s.replace(/`([^`\n]+?)`/g, (_, m) => `<code>${m}</code>`);
-  // Blocks separated by a blank line become <p>; a block whose lines are all
-  // "- " / "* " / "• " bullets becomes a <ul> so list markers and indentation
-  // survive (statements use bullet lists that would otherwise collapse to bare
-  // <br> lines with no marker). The extractor emits "- " for each <li>.
-  // Paragraphs (blank line) + line breaks. List detection is lenient: the
-  // extractor emits "- " for each <li>, but a flash-lite model often drops the
-  // leading "- " on some lines, so a strict every-line check would fall back to
-  // <p> and leave a literal "- " in the text (ugly). We render a <ul> whenever a
-  // majority of the lines carry a bullet marker, and strip any leftover marker
-  // from non-list lines so a literal "- " never leaks through either way.
-  const blocks = s.split(/\n{2,}/).map((block) => {
-    const lines = block.split("\n");
-    // A run of "- " / "* " / "• " bullets renders as a <ul> so list markers and
-    // indentation survive. Models sometimes drop the leading marker on a few
-    // lines, so we use a majority test (>=2 marked AND marked > half) instead of
-    // a strict all-lines check — otherwise a near-list falls back to <p> and the
-    // surviving "- " shows up as a literal, ugly dash.
-    const marked = lines.filter((l) => /^\s*[-*•]\s+/.test(l)).length;
-    const isList = marked >= 2 && marked * 2 > lines.length;
-    if (isList) {
-      const items = lines
-        .map((l) => `<li>${l.replace(/^\s*[-*•]\s+/, "").trim()}</li>`)
-        .join("");
-      return `<ul class="cf-tr-list">${items}</ul>`;
-    }
-    // Even a non-list paragraph may carry stray markers (e.g. one bullet the
-    // model left among prose); strip them so no literal "-" leaks to the reader.
-    const clean = lines.map((l) => l.replace(/^\s*[-*•]\s+/, ""));
-    return `<p>${clean.join("<br>")}</p>`;
-  });
-  s = blocks.join("");
-  s = s.replace(/ MATH(\d+) /g, (_, i) => slots[Number(i)] ?? "");
-  return s;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function draftPath(contestId: string, index: string): string {
-  return join(DRAFT_DIR, `${contestId}${index}.txt`);
-}
-function loadDraft(contestId: string, index: string): string {
-  try {
-    const p = draftPath(contestId, index);
-    if (existsSync(p)) return readFileSync(p, "utf-8");
-  } catch {}
-  return "";
-}
-function saveDraft(contestId: string, index: string, code: string): void {
-  try {
-    if (!existsSync(DRAFT_DIR)) mkdirSync(DRAFT_DIR, { recursive: true });
-    writeFileSync(draftPath(contestId, index), code);
-  } catch (e: any) {
-    throw new Error(`Failed to save draft: ${e.message}`);
-  }
-}
-
-const json = (data: unknown, init?: ResponseInit) =>
-  new Response(JSON.stringify(data), {
-    ...init,
-    // no-store: the Electron host keeps a Chromium HTTP cache (persist:cf
-    // partition, cleared only on launch). Without an explicit freshness
-    // directive, a 200 with no Cache-Control gets heuristic-cached, so a
-    // passive re-fetch (e.g. back-to-home /api/ac-sync without ?refresh=1)
-    // never reaches the server and serves a stale body — newly fetched
-    // problem counts don't show until a manual refresh changes the URL.
-    headers: { "content-type": "application/json", "cache-control": "no-store", ...(init?.headers ?? {}) },
-  });
 
 let config: CFConfig = loadConfig();
 primeFontCache();
@@ -161,22 +70,6 @@ async function currentHandle(): Promise<string> {
   return (config.handle || "").trim();
 }
 
-const sanitize = (c: CFConfig) => ({
-  handle: c.handle,
-  apiKey: c.apiKey,
-  apiSecret: c.apiSecret,
-  password: c.password,
-  proxy: c.proxy,
-  verifySsl: c.verifySsl,
-  ai: {
-    baseUrl: c.ai.baseUrl,
-    apiKey: c.ai.apiKey,
-    model: c.ai.model,
-    targetLang: c.ai.targetLang,
-    promptTemplate: c.ai.promptTemplate,
-    stream: c.ai.stream,
-  },
-});
 
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 3000),
@@ -194,12 +87,90 @@ const server = Bun.serve({
       // (the immutable woff2 files below keep their long max-age).
       headers: { "content-type": "text/css", "cache-control": "no-cache" },
     }),
+    // More specific path first — otherwise /fonts/:file steals "custom".
+    "/fonts/custom/:file": (req) => {
+      const f = customFontFile(req.params.file);
+      if (!f) return new Response("not found", { status: 404 });
+      return new Response(f.body, {
+        headers: { "content-type": f.type, "cache-control": "max-age=2592000" },
+      });
+    },
     "/fonts/:file": (req) => {
       const f = fontFile(req.params.file);
       if (!f) return new Response("not found", { status: 404 });
       return new Response(f.body, {
         headers: { "content-type": f.type, "cache-control": "max-age=2592000" },
       });
+    },
+
+    "/api/fonts/custom": {
+      GET: () => json({
+        fonts: listCustomFonts(),
+        msGeorgiaFamily: MS_GEORGIA_FAMILY,
+      }),
+      POST: async (req) => {
+        try {
+          const body = await req.json().catch(() => ({}));
+          if (body?.path) {
+            const r = importCustomFontFromPath({
+              family: String(body.family || "").trim(),
+              path: String(body.path),
+              weight: body.weight != null ? Number(body.weight) : 400,
+              style: body.style === "italic" ? "italic" : "normal",
+              source: body.source ? String(body.source) : undefined,
+            });
+            if (!r.ok) return json({ error: r.error }, { status: 400 });
+            return json({ font: r.font });
+          }
+          const family = String(body?.family || "").trim();
+          const facesIn = Array.isArray(body?.faces) ? body.faces : [];
+          if (!facesIn.length && body?.dataBase64) {
+            facesIn.push({
+              name: body.name,
+              dataBase64: body.dataBase64,
+              weight: body.weight,
+              style: body.style,
+            });
+          }
+          const faces = [];
+          for (const f of facesIn) {
+            const b64 = String(f?.dataBase64 || "").replace(/^data:[^;]+;base64,/, "");
+            if (!b64) return json({ error: "Missing face data" }, { status: 400 });
+            let data: Buffer;
+            try {
+              data = Buffer.from(b64, "base64");
+            } catch {
+              return json({ error: "Invalid base64" }, { status: 400 });
+            }
+            if (data.length > 12 * 1024 * 1024) {
+              return json({ error: "Font file too large (max 12MB)" }, { status: 400 });
+            }
+            faces.push({
+              name: f?.name ? String(f.name) : undefined,
+              data,
+              weight: f?.weight != null ? Number(f.weight) : 400,
+              style: f?.style === "italic" ? "italic" as const : "normal" as const,
+            });
+          }
+          const r = addCustomFont({
+            family,
+            id: body?.id ? String(body.id) : undefined,
+            faces,
+            source: body?.source ? String(body.source) : "uploaded",
+          });
+          if (!r.ok) return json({ error: r.error }, { status: 400 });
+          return json({ font: r.font });
+        } catch (e: any) {
+          return json({ error: e.message }, { status: 500 });
+        }
+      },
+    },
+    "/api/fonts/custom/:id": {
+      DELETE: (req) => {
+        const r = deleteCustomFont(req.params.id);
+        if (!r.ok) return json({ error: r.error }, { status: 404 });
+        return json({ ok: true });
+      },
     },
 
     // Avatar proxy: fetch CF avatars through the app's (proxy-aware) network
@@ -241,6 +212,12 @@ const server = Bun.serve({
             // on reset, never an empty string, so a real edit is never lost).
             promptTemplate: body.ai?.promptTemplate || config.ai.promptTemplate,
             stream: body.ai?.stream ?? config.ai.stream,
+            autoMode: body.ai?.autoMode ?? config.ai.autoMode,
+            autoTrigger: body.ai?.autoTrigger ?? config.ai.autoTrigger,
+            rpm: body.ai?.rpm ?? config.ai.rpm,
+            concurrency: body.ai?.concurrency ?? config.ai.concurrency,
+            autoCollapse: body.ai?.autoCollapse ?? config.ai.autoCollapse,
+            requestIntervalMs: body.ai?.requestIntervalMs ?? config.ai.requestIntervalMs,
           },
         };
         config = next;
@@ -448,6 +425,85 @@ const server = Bun.serve({
           const result = await submitCode(config, id, req.params.index, code, languageId);
           return json({ result });
         } catch (e: any) { return json({ error: e.message }, { status: 500 }); }
+      },
+    },
+
+    // Settings: list models from the OpenAI-compatible provider. Body may
+    // override baseUrl/apiKey so the form can probe values before autosave
+    // lands on disk.
+    "/api/ai/models": {
+      POST: async (req) => {
+        try {
+          const body = await req.json().catch(() => ({}));
+          const baseUrl = String(body?.baseUrl ?? config.ai.baseUrl ?? "").trim();
+          const apiKey = String(body?.apiKey ?? config.ai.apiKey ?? "");
+          const result = await listAiModels({ baseUrl, apiKey });
+          if ("error" in result) return json({ error: result.error }, { status: 502 });
+          return json({ models: result.models });
+        } catch (e: any) {
+          return json({ error: e.message }, { status: 500 });
+        }
+      },
+    },
+
+    // Settings: smoke-test chat/completions (stream or non-stream). Same
+    // override contract as /api/ai/models.
+    "/api/ai/test": {
+      POST: async (req) => {
+        try {
+          const body = await req.json().catch(() => ({}));
+          const baseUrl = String(body?.baseUrl ?? config.ai.baseUrl ?? "").trim();
+          const apiKey = String(body?.apiKey ?? config.ai.apiKey ?? "");
+          const model = String(body?.model ?? config.ai.model ?? "").trim();
+          const stream = !!body?.stream;
+          const result = await testAiChat({ baseUrl, apiKey, model, stream });
+          if (!result.ok) return json(result, { status: 502 });
+          return json(result);
+        } catch (e: any) {
+          return json({ ok: false, error: e.message, latencyMs: 0 }, { status: 500 });
+        }
+      },
+    },
+
+    // Settings: fire several tiny completions under the current concurrency +
+    // requestIntervalMs (+ rpm). A 429 means those knobs are too aggressive.
+    "/api/ai/rate-test": {
+      POST: async (req) => {
+        try {
+          const body = await req.json().catch(() => ({}));
+          const baseUrl = String(body?.baseUrl ?? config.ai.baseUrl ?? "").trim();
+          const apiKey = String(body?.apiKey ?? config.ai.apiKey ?? "");
+          const model = String(body?.model ?? config.ai.model ?? "").trim();
+          const concurrency = Number(body?.concurrency ?? config.ai.concurrency ?? 2);
+          const requestIntervalMs = Number(
+            body?.requestIntervalMs ?? config.ai.requestIntervalMs ?? 200,
+          );
+          const rpm = Number(body?.rpm ?? config.ai.rpm ?? 0);
+          const result = await probeAiRateLimit({
+            baseUrl,
+            apiKey,
+            model,
+            concurrency,
+            requestIntervalMs,
+            rpm,
+          });
+          if (result.error && result.total === 0) {
+            return json(result, { status: 400 });
+          }
+          return json(result);
+        } catch (e: any) {
+          return json({
+            ok: false,
+            rateLimited: false,
+            total: 0,
+            succeeded: 0,
+            rateLimitedCount: 0,
+            failedCount: 0,
+            elapsedMs: 0,
+            error: e.message,
+            shots: [],
+          }, { status: 500 });
+        }
       },
     },
 

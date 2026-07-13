@@ -5,7 +5,10 @@ import type { Contest } from "../api";
 import type { CfFrameHandle, Route } from "./shared";
 import { useHistoryStack } from "./hooks";
 import { Topbar, BottomBar, PersistentCfFrame } from "./chrome";
-import { applyColorTheme, applyTrTheme, applyAllFonts, readColorTheme, readTrTheme } from "./themes";
+import {
+  applyColorTheme, applyTrTheme, applyAllFonts, preferMicrosoftGeorgiaIfUnset,
+  readColorTheme, readTrTheme,
+} from "./themes";
 import { ContestsPage } from "./pages/ContestsPage";
 import { ProblemsPage } from "./pages/ProblemsPage";
 import { ProblemPage } from "./pages/ProblemPage";
@@ -42,6 +45,19 @@ function App() {
     applyTrTheme(readTrTheme());
     applyColorTheme(readColorTheme());
     applyAllFonts();
+    // Prefer local Microsoft Georgia for statement when the user has never
+    // set a statement font and the custom library already has it (seeded from
+    // Proton/Wine/msttcorefonts on server start).
+    void fetch("/api/fonts/custom")
+      .then((r) => r.json())
+      .then((j) => {
+        const families: string[] = Array.isArray(j?.fonts)
+          ? j.fonts.map((f: any) => String(f.family || "")).filter(Boolean)
+          : [];
+        const ms = String(j?.msGeorgiaFamily || "Microsoft Georgia");
+        preferMicrosoftGeorgiaIfUnset(ms, families);
+      })
+      .catch(() => {});
   }, []);
 
   // CF context — drives default URLs for the bottom-bar tabs. Tracks the

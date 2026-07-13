@@ -15,17 +15,71 @@ const net = require("net");
 const PORT = Number(process.env.CFAPP_PORT || 3000);
 const IS_PACKAGED = app.isPackaged;
 const REPO_ROOT = IS_PACKAGED ? path.join(process.resourcesPath, "app") : path.resolve(__dirname, "..");
-const BUN_PATH = IS_PACKAGED ? path.join(process.resourcesPath, "bun") : "bun";
-const COOKIE_FILE = path.join(os.homedir(), ".config", "cfapp", "codeforces-cookies.json");
-// Pin a UA whose major Chrome version matches the actual Chromium that
-// Electron ships with — Cloudflare Turnstile compares the UA string to
-// real TLS/JS fingerprints and challenge-loops anything that lies. Bumped
-// from 124 to 148 (Electron 42 → Chromium 148). Also keep this in sync
-// with `UA` in src/api.ts so the curl replay matches what cf_clearance
-// was issued under.
-const CF_USER_AGENT =
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
-  "Chrome/148.0.0.0 Safari/537.36";
+
+// Platform-aware config dir — must match src/paths.ts configDir().
+function configDir() {
+  if (process.env.CFAPP_CONFIG_DIR) return process.env.CFAPP_CONFIG_DIR;
+  const home = os.homedir();
+  if (process.platform === "darwin") {
+    return path.join(home, "Library", "Application Support", "cfapp");
+  }
+  if (process.platform === "win32") {
+    const base = process.env.APPDATA || path.join(home, "AppData", "Roaming");
+    return path.join(base, "cfapp");
+  }
+  const xdg = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
+  return path.join(xdg, "cfapp");
+}
+
+// Resolve the Bun binary for this OS. Packaged builds ship a platform-matched
+// binary under resources/; dev uses PATH. Wrong-arch packages fall back to PATH.
+function resolveBunPath() {
+  if (IS_PACKAGED) {
+    const res = process.resourcesPath;
+    const candidates = process.platform === "win32"
+      ? [
+          path.join(res, "bun", "bun.exe"),
+          path.join(res, "bun.exe"),
+          path.join(res, "bun"),
+        ]
+      : [
+          path.join(res, "bun"),
+          path.join(res, "bun", "bun"),
+        ];
+    for (const c of candidates) {
+      try { if (fs.existsSync(c)) return c; } catch {}
+    }
+  }
+  return process.platform === "win32" ? "bun.exe" : "bun";
+}
+
+const BUN_PATH = resolveBunPath();
+const COOKIE_FILE = path.join(configDir(), "codeforces-cookies.json");
+
+// Pin a UA whose major Chrome version matches Electron's Chromium, AND whose
+// platform token matches this OS (X11 vs Macintosh vs Windows NT). Cloudflare
+// compares UA to TLS/JS fingerprints; a Linux UA on macOS causes clearance drift.
+// Keep in sync with chromeUserAgent() in src/paths.ts (Chrome 148 / Electron 42).
+const CHROME_FULL = "148.0.0.0";
+function chromeUserAgent() {
+  if (process.platform === "darwin") {
+    return (
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+      `(KHTML, like Gecko) Chrome/${CHROME_FULL} Safari/537.36`
+    );
+  }
+  if (process.platform === "win32") {
+    return (
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+      `(KHTML, like Gecko) Chrome/${CHROME_FULL} Safari/537.36`
+    );
+  }
+  return (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+    `Chrome/${CHROME_FULL} Safari/537.36`
+  );
+}
+const CF_USER_AGENT = chromeUserAgent();
 let bunProc = null;
 let mainWindow = null;
 
